@@ -5,12 +5,12 @@ impl FluidDynamics {
         (4.0 * flow_rate) / (std::f64::consts::PI * pipe_diameter * pipe_diameter)
     }
 
-    pub fn velocity_pseudovector(velocity: f64, radius: f64) -> f64 {
-        velocity * radius
+    pub fn velocity_pseudovector(angular_velocity: f64, radius: f64) -> f64 {
+        angular_velocity * radius
     }
 
-    pub fn volume_flux(flow_rate: f64, radius: f64) -> f64 {
-        flow_rate / (std::f64::consts::PI * radius * radius)
+    pub fn volume_flux(velocity: f64, radius: f64) -> f64 {
+        velocity * std::f64::consts::PI * radius * radius
     }
 
     pub fn mass_current_per_volume(mass_current: f64, volume: f64) -> f64 {
@@ -29,8 +29,8 @@ impl FluidDynamics {
         density * velocity * velocity
     }
 
-    pub fn pressure_gradient(pressure: f64, distance: f64) -> f64 {
-        pressure / distance
+    pub fn pressure_gradient(pressure_difference: f64, distance: f64) -> f64 {
+        pressure_difference / distance
     }
 
     pub fn buoyancy_force(density: f64, volume: f64, gravity: f64) -> f64 {
@@ -38,18 +38,47 @@ impl FluidDynamics {
     }
 
     pub fn bernoullis_equation(pressure: f64, density: f64, velocity: f64, height: f64, gravity: f64) -> f64 {
-        pressure + (density * velocity * velocity) + (density * gravity * height)
+        pressure + 0.5 * density * velocity * velocity + density * gravity * height
     }
 
     pub fn eulers_equations(pressure: f64, density: f64, velocity: f64, height: f64, gravity: f64) -> f64 {
-        pressure + (density * velocity * velocity) + (density * gravity * height)
+        pressure / density + 0.5 * velocity * velocity + gravity * height
     }
 
-    pub fn convective_acceleration(velocity: f64, acceleration: f64) -> f64 {
-        velocity * acceleration
+    pub fn convective_acceleration(velocity: f64, velocity_gradient: f64) -> f64 {
+        velocity * velocity_gradient
     }
 
-    pub fn navier_stokes_equations(pressure: f64, density: f64, velocity: f64, height: f64, gravity: f64) -> f64 {
-        pressure + (density * velocity * velocity) + (density * gravity * height)
+    pub fn navier_stokes_equations(pressure_gradient: f64, density: f64, body_force: f64, velocity_laplacian: f64, dynamic_viscosity: f64) -> f64 {
+        -pressure_gradient / density + body_force + dynamic_viscosity * velocity_laplacian / density
+    }
+
+    pub fn reynolds_number(density: f64, velocity: f64, characteristic_length: f64, dynamic_viscosity: f64) -> f64 {
+        density * velocity * characteristic_length / dynamic_viscosity
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FluidDynamics;
+
+    #[test]
+    fn volumetric_flow_relations_are_consistent() {
+        let flow_rate = 2.0;
+        let radius = 0.5;
+        let diameter = 2.0 * radius;
+        let velocity = FluidDynamics::flow_velocity(flow_rate, diameter);
+        let reconstructed_flow_rate = FluidDynamics::volume_flux(velocity, radius);
+
+        assert!((reconstructed_flow_rate - flow_rate).abs() < 1e-12);
+    }
+
+    #[test]
+    fn bernoulli_and_reynolds_helpers_match_known_values() {
+        let bernoulli = FluidDynamics::bernoullis_equation(1000.0, 2.0, 3.0, 5.0, 9.81);
+        let reynolds = FluidDynamics::reynolds_number(1000.0, 2.0, 0.5, 0.001);
+
+        assert!((bernoulli - 1107.1).abs() < 1e-9);
+        assert!((reynolds - 1_000_000.0).abs() < 1e-6);
     }
 }

@@ -1,6 +1,14 @@
 pub struct CivilEngineeringLibrary;
 
 impl CivilEngineeringLibrary {
+    pub fn concrete_mix_total_parts(cement_part: f64, sand_part: f64, aggregate_part: f64) -> f64 {
+        cement_part + sand_part + aggregate_part
+    }
+
+    pub fn concrete_component_quantity(total_dry_volume: f64, component_part: f64, total_parts: f64) -> f64 {
+        total_dry_volume * component_part / total_parts
+    }
+
     pub fn cement_quantity(volume: f64, ratio: f64) -> f64 {
         volume / (1.0 + ratio)
     }
@@ -31,6 +39,10 @@ impl CivilEngineeringLibrary {
 
     pub fn steel_quantity(area: f64, spacing: f64) -> f64 {
         area / spacing
+    }
+
+    pub fn shear_stress(force: f64, area: f64) -> f64 {
+        force / area
     }
 
     pub fn weight_of_steel_per_unit_length(diameter: f64) -> f64 {
@@ -77,12 +89,20 @@ impl CivilEngineeringLibrary {
         force * distance
     }
 
-    pub fn shear_force(force: f64, distance: f64) -> f64 {
-        force / distance
+    pub fn shear_force(force: f64, _distance: f64) -> f64 {
+        force
     }
 
     pub fn bricks_calculation(length: f64, width: f64, height: f64) -> f64 {
         length * width * height
+    }
+
+    pub fn brickwork_volume(length: f64, width: f64, height: f64) -> f64 {
+        length * width * height
+    }
+
+    pub fn number_of_bricks_required(wall_volume: f64, brick_volume: f64, wastage_factor: f64) -> f64 {
+        wall_volume * wastage_factor / brick_volume
     }
 
     pub fn dry_material_quantity_for_mortar(volume: f64, ratio: f64) -> f64 {
@@ -115,5 +135,29 @@ impl CivilEngineeringLibrary {
 
     pub fn soil_settlement(initial_volume: f64, final_volume: f64) -> f64 {
         initial_volume - final_volume
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CivilEngineeringLibrary;
+
+    #[test]
+    fn section_and_loading_calculations_match_known_values() {
+        assert!((CivilEngineeringLibrary::slope_as_percentage(1.0, 4.0) - 25.0).abs() < 1e-12);
+        assert!((CivilEngineeringLibrary::moment_of_inertia_of_rectangular_section(0.3, 0.6) - 0.0054).abs() < 1e-12);
+        assert!((CivilEngineeringLibrary::bending_moment(12.0, 2.5) - 30.0).abs() < 1e-12);
+        assert!((CivilEngineeringLibrary::shear_force(18.0, 3.0) - 18.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn material_estimates_are_consistent() {
+        let total_parts = CivilEngineeringLibrary::concrete_mix_total_parts(1.0, 2.0, 4.0);
+        let cement = CivilEngineeringLibrary::concrete_component_quantity(1.54, 1.0, total_parts);
+        let brick_count = CivilEngineeringLibrary::number_of_bricks_required(1.0, 0.001539, 1.05);
+
+        assert!((total_parts - 7.0).abs() < 1e-12);
+        assert!(cement > 0.21 && cement < 0.23);
+        assert!(brick_count > 680.0 && brick_count < 683.0);
     }
 }
