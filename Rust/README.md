@@ -1,59 +1,82 @@
 ﻿# OpenMathLibrary
 
-OpenMathLibrary is a Rust-based library designed to provide a comprehensive suite of mathematical tools and utilities. It is modular, scalable, and adheres to Rust's best practices, making it suitable for various mathematical domains such as actuarial science and engineering.
+`open_math_library` is a Rust crate that collects reusable formulas and numerical helpers for
+actuarial mathematics, arithmetic, and engineering calculations.
 
-## Features
-- **Actuarial Mathematics**: Includes modules for mortality calculations, annuities, and other actuarial computations.
-- **Engineering Mathematics**: Provides tools for statics, dynamics, and other engineering-related calculations.
-- **Utilities**: Shared mathematical utilities for common operations.
+## Modules
 
-## Folder Structure
+- `actuarial_and_arithmetic`
+  - `ActuarialLibrary`
+  - `ArithmeticLibrary`
+  - `BisectionLibrary`
+  - `PiecewiseSpecialFunctionsLibrary`
+- `engineering`
+  - `AngularFrequencies`
+  - `CivilEngineeringLibrary`
+  - `ClassicalMechanics`
+  - `DerivedDynamicQuantities`
+  - `ElectroMagnetism`
+  - `FluidDynamics`
+  - `GeneralEnergyDefinitions`
+
+## Project Structure
+
+```text
+Rust/
+├── Cargo.toml
+├── CODING_STANDARDS.md
+├── README.md
+├── src/
+│   ├── actuarial_and_arithmetic/
+│   │   ├── actuarial_library.rs
+│   │   ├── arithmetic_library.rs
+│   │   ├── bisection_library.rs
+│   │   ├── mod.rs
+│   │   └── piecewise_special_functions_library.rs
+│   ├── engineering/
+│   │   ├── angular_frequencies.rs
+│   │   ├── civil_engineering_library.rs
+│   │   ├── classical_mechanics.rs
+│   │   ├── derived_dynamic_quantities.rs
+│   │   ├── electro_magnetism.rs
+│   │   ├── fluid_dynamics.rs
+│   │   ├── general_energy_definitions.rs
+│   │   └── mod.rs
+│   └── lib.rs
+└── tests/
 ```
-C:\Dev\OpenMathLibrary\Rust
-│
-├── Cargo.toml          # Rust project configuration
-├── README.md           # Project documentation
-├── LICENSE             # Licensing information
-│
-├── src                 # Source code
-│   ├── lib.rs          # Library entry point
-│   ├── actuarial       # Actuarial math module
-│   │   ├── mod.rs      # Module entry point
-│   │   ├── mortality.rs # Example submodule
-│   │   └── annuities.rs # Example submodule
-│   ├── engineering     # Engineering math module
-│   │   ├── mod.rs      # Module entry point
-│   │   ├── statics.rs  # Example submodule
-│   │   └── dynamics.rs # Example submodule
-│   └── utils           # Shared utilities
-│       ├── mod.rs      # Module entry point
-│       └── math.rs     # Example utility functions
-│
-└── tests               # Integration tests
-    ├── actuarial_tests.rs
-    └── engineering_tests.rs
+
+## Usage
+
+Add the crate to your project and import the exported types from the crate root:
+
+```rust
+use open_math_library::{ActuarialLibrary, ClassicalMechanics};
+
+fn main() {
+    let future_value = ActuarialLibrary::future_value(1_000.0, 0.05, 2).unwrap();
+    let kinetic_energy = ClassicalMechanics::translational_kinetic_energy(4.0, 3.0);
+
+    assert!(future_value > 1_100.0);
+    assert!((kinetic_energy - 18.0).abs() < 1e-12);
+}
 ```
 
-## Getting Started
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd OpenMathLibrary/Rust
-   ```
-3. Build the project:
-   ```bash
-   cargo build
-   ```
-4. Run tests:
-   ```bash
-   cargo test
-   ```
+## Development Checks
 
-## Contributing
-Contributions are welcome! Please fork the repository and submit a pull request.
+Run the standard quality gates before committing changes:
+
+```powershell
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+cargo doc --no-deps
+```
+
+## Coding Standards
+
+Project-specific Rust conventions are documented in `CODING_STANDARDS.md`.
 
 ## License
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+
+This project is licensed under the MIT License.

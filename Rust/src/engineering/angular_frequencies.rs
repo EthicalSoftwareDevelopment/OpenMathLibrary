@@ -1,26 +1,35 @@
+//! Angular frequency and oscillator formulas.
+
+/// Provides helpers for angular frequency conversions and oscillators.
 pub struct AngularFrequencies;
 
 impl AngularFrequencies {
+    /// Converts frequency in hertz to angular frequency in radians per second.
     pub fn angular_frequency_from_frequency(frequency: f64) -> f64 {
         2.0 * std::f64::consts::PI * frequency
     }
 
+    /// Converts angular frequency in radians per second to frequency in hertz.
     pub fn frequency_from_angular_frequency(angular_frequency: f64) -> f64 {
         angular_frequency / (2.0 * std::f64::consts::PI)
     }
 
+    /// Computes the oscillation period from an angular frequency.
     pub fn period_from_angular_frequency(angular_frequency: f64) -> f64 {
         2.0 * std::f64::consts::PI / angular_frequency.abs()
     }
 
+    /// Returns the magnitude of the angular frequency for an undamped unforced oscillator.
     pub fn linear_undamped_unforced_oscillator(angular_frequency: f64) -> f64 {
         angular_frequency.abs()
     }
 
+    /// Computes the natural angular frequency of a simple harmonic oscillator.
     pub fn simple_harmonic_oscillator(spring_constant: f64, mass: f64) -> f64 {
         (spring_constant / mass).sqrt()
     }
 
+    /// Computes the damped angular frequency of a linear unforced damped harmonic oscillator.
     pub fn linear_unforced_dho(natural_angular_frequency: f64, damping_ratio: f64) -> f64 {
         if damping_ratio.abs() >= 1.0 {
             0.0
@@ -29,18 +38,22 @@ impl AngularFrequencies {
         }
     }
 
+    /// Computes a low-amplitude angular simple harmonic oscillator response scale.
     pub fn low_amplitude_angular_sho(angular_frequency: f64, amplitude: f64) -> f64 {
         angular_frequency.abs() * amplitude.abs()
     }
 
+    /// Computes a low-amplitude pendulum response scale.
     pub fn low_amplitude_simple_pendulum(angular_frequency: f64, amplitude: f64) -> f64 {
         angular_frequency.abs() * amplitude.abs()
     }
 
+    /// Computes the small-angle angular frequency of a simple pendulum.
     pub fn simple_pendulum(length: f64, gravity: f64) -> f64 {
         (gravity / length).sqrt()
     }
 
+    /// Computes the angular frequency of a torsional pendulum.
     pub fn torsional_pendulum(torsion_constant: f64, moment_of_inertia: f64) -> f64 {
         (torsion_constant / moment_of_inertia).sqrt()
     }

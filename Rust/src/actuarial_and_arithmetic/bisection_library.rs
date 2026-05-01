@@ -1,6 +1,10 @@
+//! Root-finding algorithms for scalar equations.
+
+/// Provides bisection, Newton-Raphson, and secant root-finding methods.
 pub struct BisectionLibrary;
 
 impl BisectionLibrary {
+    /// Approximates a root using the bisection method on an interval with opposite endpoint signs.
     pub fn bisection<F>(
         mut value_a: f64,
         mut value_b: f64,
@@ -54,6 +58,7 @@ impl BisectionLibrary {
         Err("Bisection method did not converge within the maximum number of iterations.")
     }
 
+    /// Approximates a root using the Newton-Raphson method.
     pub fn newton_raphson<F, G>(
         mut x: f64,
         tolerance: f64,
@@ -100,6 +105,7 @@ impl BisectionLibrary {
         Err("Newton-Raphson method did not converge within the maximum number of iterations.")
     }
 
+    /// Approximates a root using the secant method.
     pub fn secant<F>(
         mut x0: f64,
         mut x1: f64,
@@ -148,6 +154,7 @@ impl BisectionLibrary {
         Err("Secant method did not converge within the maximum number of iterations.")
     }
 
+    /// Alias for [`Self::bisection`].
     pub fn binomial<F>(
         value_a: f64,
         value_b: f64,
@@ -174,7 +181,8 @@ mod tests {
 
     #[test]
     fn newton_raphson_finds_square_root_of_two() {
-        let root = BisectionLibrary::newton_raphson(1.5, 1e-12, 25, |x| x * x - 2.0, |x| 2.0 * x).unwrap();
+        let root =
+            BisectionLibrary::newton_raphson(1.5, 1e-12, 25, |x| x * x - 2.0, |x| 2.0 * x).unwrap();
         assert!((root - 2.0_f64.sqrt()).abs() < 1e-9);
     }
 

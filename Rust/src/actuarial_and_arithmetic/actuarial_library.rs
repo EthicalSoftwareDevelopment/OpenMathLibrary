@@ -1,28 +1,45 @@
-﻿pub struct ActuarialLibrary;
+﻿//! Time-value-of-money and actuarial present-value formulas.
+
+/// Provides actuarial discounting, annuity, and present-value calculations.
+pub struct ActuarialLibrary;
 
 impl ActuarialLibrary {
+    /// Computes the accumulation factor `(1 + i)^n` for a given interest rate and period count.
     pub fn accumulation_factor(interest_rate: f64, periods: u32) -> Result<f64, &'static str> {
         Self::validate_rate(interest_rate)?;
         Ok((1.0 + interest_rate).powi(periods as i32))
     }
 
+    /// Computes the discount factor, which is the reciprocal of the accumulation factor.
     pub fn discount_factor(interest_rate: f64, periods: u32) -> Result<f64, &'static str> {
         Ok(1.0 / Self::accumulation_factor(interest_rate, periods)?)
     }
 
-    pub fn future_value(present_value: f64, interest_rate: f64, periods: u32) -> Result<f64, &'static str> {
+    /// Projects a present value forward for the supplied rate and number of periods.
+    pub fn future_value(
+        present_value: f64,
+        interest_rate: f64,
+        periods: u32,
+    ) -> Result<f64, &'static str> {
         Ok(present_value * Self::accumulation_factor(interest_rate, periods)?)
     }
 
-    pub fn present_value(future_value: f64, interest_rate: f64, periods: u32) -> Result<f64, &'static str> {
+    /// Discounts a future value back to the present for the supplied rate and periods.
+    pub fn present_value(
+        future_value: f64,
+        interest_rate: f64,
+        periods: u32,
+    ) -> Result<f64, &'static str> {
         Ok(future_value * Self::discount_factor(interest_rate, periods)?)
     }
 
+    /// Converts an effective interest rate into the corresponding effective discount rate.
     pub fn effective_discount_rate(interest_rate: f64) -> Result<f64, &'static str> {
         Self::validate_rate(interest_rate)?;
         Ok(interest_rate / (1.0 + interest_rate))
     }
 
+    /// Computes the net present value of a series of cash flows.
     pub fn net_present_value(interest_rate: f64, cash_flows: &[f64]) -> Result<f64, &'static str> {
         Self::validate_rate(interest_rate)?;
 
@@ -34,7 +51,12 @@ impl ActuarialLibrary {
         Ok(total)
     }
 
-    pub fn annuity_immediate(payment: f64, interest_rate: f64, periods: u32) -> Result<f64, &'static str> {
+    /// Computes the present value of an annuity-immediate.
+    pub fn annuity_immediate(
+        payment: f64,
+        interest_rate: f64,
+        periods: u32,
+    ) -> Result<f64, &'static str> {
         Self::validate_rate(interest_rate)?;
 
         if periods == 0 {
@@ -48,10 +70,16 @@ impl ActuarialLibrary {
         Ok(payment * (1.0 - discount) / interest_rate)
     }
 
-    pub fn annuity_due(payment: f64, interest_rate: f64, periods: u32) -> Result<f64, &'static str> {
+    /// Computes the present value of an annuity-due.
+    pub fn annuity_due(
+        payment: f64,
+        interest_rate: f64,
+        periods: u32,
+    ) -> Result<f64, &'static str> {
         Ok(Self::annuity_immediate(payment, interest_rate, periods)? * (1.0 + interest_rate))
     }
 
+    /// Computes the value of a level perpetuity.
     pub fn perpetuity(payment: f64, interest_rate: f64) -> Result<f64, &'static str> {
         if interest_rate <= 0.0 {
             return Err("Interest rate must be positive for a perpetuity.");
@@ -97,10 +125,10 @@ mod tests {
     fn annuities_and_npv_produce_expected_results() {
         let annuity_immediate = ActuarialLibrary::annuity_immediate(100.0, 0.05, 3).unwrap();
         let annuity_due = ActuarialLibrary::annuity_due(100.0, 0.05, 3).unwrap();
-        let npv = ActuarialLibrary::net_present_value(0.05, &[-250.0, 100.0, 100.0, 100.0]).unwrap();
+        let npv =
+            ActuarialLibrary::net_present_value(0.05, &[-250.0, 100.0, 100.0, 100.0]).unwrap();
 
         assert!(annuity_due > annuity_immediate);
         assert!(npv > 20.0 && npv < 25.0);
     }
 }
-

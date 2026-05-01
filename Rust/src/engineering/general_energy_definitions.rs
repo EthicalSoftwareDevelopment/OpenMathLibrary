@@ -1,38 +1,50 @@
+//! Mechanical work, energy, and power formulas.
+
+/// Provides general energy-related helper formulas.
 pub struct GeneralEnergyDefinitions;
 
 impl GeneralEnergyDefinitions {
+    /// Computes mechanical work from force, displacement, and angle.
     pub fn mechanical_work(force: f64, displacement: f64, angle: f64) -> f64 {
         force * displacement * angle.cos()
     }
 
+    /// Computes work done on a mechanical system.
     pub fn work_done_on_mechanical_system(force: f64, displacement: f64, angle: f64) -> f64 {
         force * displacement * angle.cos()
     }
 
+    /// Computes gravitational potential energy.
     pub fn potential_energy(mass: f64, height: f64, gravity: f64) -> f64 {
         mass * height * gravity
     }
 
+    /// Computes translational kinetic energy.
     pub fn kinetic_energy(mass: f64, velocity: f64) -> f64 {
         0.5 * mass * velocity * velocity
     }
 
+    /// Computes rotational kinetic energy.
     pub fn rotational_kinetic_energy(moment_of_inertia: f64, angular_velocity: f64) -> f64 {
         0.5 * moment_of_inertia * angular_velocity * angular_velocity
     }
 
+    /// Computes spring potential energy.
     pub fn spring_potential_energy(spring_constant: f64, displacement: f64) -> f64 {
         0.5 * spring_constant * displacement * displacement
     }
 
+    /// Sums kinetic and potential energy into total mechanical energy.
     pub fn mechanical_energy(kinetic_energy: f64, potential_energy: f64) -> f64 {
         kinetic_energy + potential_energy
     }
 
+    /// Computes mechanical power from force and velocity.
     pub fn mechanical_power(force: f64, velocity: f64) -> f64 {
         force * velocity
     }
 
+    /// Computes power as work divided by time.
     pub fn power_from_work(work: f64, time: f64) -> f64 {
         work / time
     }

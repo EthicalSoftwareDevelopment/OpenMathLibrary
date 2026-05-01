@@ -1,6 +1,10 @@
+//! Arithmetic and elementary number-theory helpers.
+
+/// Provides common arithmetic, combinatoric, and number-theoretic operations.
 pub struct ArithmeticLibrary;
 
 impl ArithmeticLibrary {
+    /// Computes the greatest common divisor of two integers.
     pub fn gcd(mut value_a: i64, mut value_b: i64) -> i64 {
         value_a = value_a.abs();
         value_b = value_b.abs();
@@ -14,6 +18,7 @@ impl ArithmeticLibrary {
         value_a
     }
 
+    /// Computes the least common multiple of two integers.
     pub fn lcm(value_a: i64, value_b: i64) -> i64 {
         if value_a == 0 || value_b == 0 {
             return 0;
@@ -22,6 +27,7 @@ impl ArithmeticLibrary {
         (value_a / Self::gcd(value_a, value_b) * value_b).abs()
     }
 
+    /// Computes `n!` when the result fits in `u128`.
     pub fn factorial(number: usize) -> Result<u128, &'static str> {
         if number > 34 {
             return Err("Factorial result would overflow u128.");
@@ -37,6 +43,7 @@ impl ArithmeticLibrary {
         Ok(result)
     }
 
+    /// Computes the binomial coefficient `n choose k`.
     pub fn binomial_coefficient(number_n: usize, number_k: usize) -> Result<u128, &'static str> {
         if number_k > number_n {
             return Err("k must be less than or equal to n.");
@@ -57,6 +64,7 @@ impl ArithmeticLibrary {
         Ok(result)
     }
 
+    /// Computes the Möbius function of an integer.
     pub fn mobius(number: i32) -> i32 {
         if number == 0 {
             return 0;
@@ -67,9 +75,14 @@ impl ArithmeticLibrary {
             return 0;
         }
 
-        if factors.len() % 2 == 0 { 1 } else { -1 }
+        if factors.len().is_multiple_of(2) {
+            1
+        } else {
+            -1
+        }
     }
 
+    /// Computes the sum of all positive divisors of a positive integer.
     pub fn sigma(number: i32) -> Result<i32, &'static str> {
         Self::validate_positive_integer(number)?;
 
@@ -89,6 +102,7 @@ impl ArithmeticLibrary {
         Ok(sum)
     }
 
+    /// Counts the number of positive divisors of a positive integer.
     pub fn divisor_count(number: i32) -> Result<i32, &'static str> {
         Self::validate_positive_integer(number)?;
 
@@ -100,6 +114,7 @@ impl ArithmeticLibrary {
         Ok(count)
     }
 
+    /// Computes the aliquot sum of a positive integer.
     pub fn aliquot_sum(number: i32) -> Result<i32, &'static str> {
         Self::validate_positive_integer(number)?;
 
@@ -110,6 +125,7 @@ impl ArithmeticLibrary {
         Ok(Self::sigma(number)? - number.abs())
     }
 
+    /// Computes Euler's totient function.
     pub fn totient(number: i32) -> Result<i32, &'static str> {
         Self::validate_positive_integer(number)?;
 
@@ -121,6 +137,7 @@ impl ArithmeticLibrary {
         Ok(result)
     }
 
+    /// Counts the prime numbers less than or equal to `number`.
     pub fn prime_counting(number: usize) -> usize {
         if number < 2 {
             return 0;
@@ -141,6 +158,7 @@ impl ArithmeticLibrary {
         is_prime.into_iter().filter(|value| *value).count()
     }
 
+    /// Computes the integer partition count of `number`.
     pub fn partition(number: usize) -> Result<usize, &'static str> {
         let mut partitions = vec![0_usize; number + 1];
         partitions[0] = 1;
@@ -156,10 +174,12 @@ impl ArithmeticLibrary {
         Ok(partitions[number])
     }
 
+    /// Counts the distinct prime factors of an integer.
     pub fn omega(number: i32) -> i32 {
         Self::prime_factorization(number).len() as i32
     }
 
+    /// Counts prime factors with multiplicity.
     pub fn big_omega(number: i32) -> i32 {
         Self::prime_factorization(number)
             .into_iter()
@@ -167,6 +187,7 @@ impl ArithmeticLibrary {
             .sum()
     }
 
+    /// Computes the first Chebyshev function.
     pub fn chebyshev_theta(number: i32) -> f64 {
         if number < 2 {
             return 0.0;
@@ -182,6 +203,7 @@ impl ArithmeticLibrary {
         sum
     }
 
+    /// Computes the second Chebyshev function.
     pub fn chebyshev_psi(number: i32) -> f64 {
         if number < 2 {
             return 0.0;
@@ -201,6 +223,7 @@ impl ArithmeticLibrary {
         sum
     }
 
+    /// Computes the Liouville function of a positive integer.
     pub fn liouville(number: i32) -> Result<i32, &'static str> {
         Self::validate_positive_integer(number)?;
 
@@ -211,6 +234,7 @@ impl ArithmeticLibrary {
         }
     }
 
+    /// Returns whether an integer is prime.
     pub fn is_prime(number: i32) -> bool {
         if number < 2 {
             return false;
@@ -236,6 +260,7 @@ impl ArithmeticLibrary {
         true
     }
 
+    /// Returns the prime factorization of an integer as `(prime, exponent)` pairs.
     pub fn prime_factorization(number: i32) -> Vec<(i64, u32)> {
         let mut remaining = i64::from(number).abs();
         let mut factors = Vec::new();

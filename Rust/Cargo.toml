@@ -3,6 +3,9 @@ name = "open_math_library"
 version = "0.1.0"
 authors = ["Demian Berisford-Maynard <ethicalsoftwaredevelopment@proton.me>"]
 edition = "2021"
+description = "A Rust library of actuarial, arithmetic, and engineering mathematics utilities."
+readme = "README.md"
+license = "MIT"
 
 [dependencies]
 
