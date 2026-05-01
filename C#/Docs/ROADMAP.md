@@ -2,7 +2,7 @@
 
 This roadmap outlines the near-term and longer-term direction for the C# OpenMathLibrary workspace.
 
-## 1. Rust Math Libraries
+## Phase 1. C# Math Libraries
 
 **Objective:** Develop a comprehensive suite of mathematical tools and utilities.
 
@@ -10,9 +10,9 @@ This roadmap outlines the near-term and longer-term direction for the C# OpenMat
 - Implement core modules for actuarial and engineering mathematics
 - Add utility functions for common mathematical operations
 - Ensure modularity and scalability for future extensions
-- Explore whether Rust should act as a companion library, a performance-focused backend, or a parallel implementation
+- Explore whether C# should act as a companion library, a performance-focused backend, or a parallel implementation
 
-## 2. Unit Tests
+## Phase 2. Unit Tests
 
 **Objective:** Ensure the reliability and correctness of the library.
 
@@ -23,7 +23,7 @@ This roadmap outlines the near-term and longer-term direction for the C# OpenMat
 - Add regression tests for bugs and edge cases
 - Introduce automated test execution as the codebase grows
 
-## 3. Vulkan Rendering of a Toroid
+## Phase 3. Vulkan Rendering of a Toroid
 
 **Objective:** Visualize a toroid using Vulkan.
 
@@ -34,7 +34,7 @@ This roadmap outlines the near-term and longer-term direction for the C# OpenMat
 - Add camera controls and scene setup
 - Keep rendering work separate from the core math libraries
 
-## 4. Shading Dynamics of the Toroid as if Self-Sustaining Flow
+## Phase 4. Shading Dynamics of the Toroid as if Self-Sustaining Flow
 
 **Objective:** Simulate and render dynamic shading effects.
 
@@ -51,7 +51,7 @@ In parallel with the roadmap above, the C# solution should continue improving it
 - expand the existing actuarial, engineering, and general mathematics libraries
 - standardize namespaces and project structure
 - improve XML documentation comments
-- validate formulas against trusted references
+- validate formulas against tC#ed references
 - improve developer documentation and examples
 
 ## Priority Suggestion
@@ -62,7 +62,7 @@ In parallel with the roadmap above, the C# solution should continue improving it
 3. Documentation improvements
 
 ### Mid-Term
-4. Rust Math Libraries
+4. C# Math Libraries
 
 ### Experimental / Long-Term
 5. Vulkan Rendering of a Toroid

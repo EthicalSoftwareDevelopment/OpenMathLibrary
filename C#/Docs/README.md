@@ -74,11 +74,29 @@ dotnet restore .\TheOpenMathLibrary.sln
 dotnet build .\TheOpenMathLibrary.sln
 ```
 
-## Testing Status
+## Test Projects
 
-There are currently no dedicated C# test projects in this workspace.
+The solution now includes dedicated MSTest projects that mirror the three production libraries:
 
-Adding unit tests is one of the highest-priority next steps for improving reliability and maintainability.
+- `TheOpenMathLibrary.ActuarialCalculators.Tests`
+- `TheOpenMathLibrary.Engineering.Tests`
+- `TheOpenMathLibrary.GeneralMathematics.Tests`
+
+These tests cover formula correctness, edge cases, regression-sensitive aliases, and invalid-input guards.
+
+## Test
+
+From the `C#` solution root, run the full automated test suite with:
+
+```powershell
+dotnet test .\TheOpenMathLibrary.sln
+```
+
+To run a single test project during development, use its project file directly. For example:
+
+```powershell
+dotnet test .\TheOpenMathLibrary.Engineering.Tests\TheOpenMathLibrary.Engineering.Tests.csproj
+```
 
 ## Notes
 

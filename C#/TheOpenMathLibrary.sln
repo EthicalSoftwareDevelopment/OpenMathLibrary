@@ -9,6 +9,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TheOpenMathLibrary.Actuaria
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TheOpenMathLibrary.GeneralMathematics", "TheOpenMathLibrary.GeneralMathematics\TheOpenMathLibrary.GeneralMathematics.csproj", "{AC609FA3-3968-430B-AEBF-B3BF3D7DCB6F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TheOpenMathLibrary.ActuarialCalculators.Tests", "TheOpenMathLibrary.ActuarialCalculators.Tests\TheOpenMathLibrary.ActuarialCalculators.Tests.csproj", "{2824889E-FC0E-4A26-8388-C20AF8303375}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TheOpenMathLibrary.Engineering.Tests", "TheOpenMathLibrary.Engineering.Tests\TheOpenMathLibrary.Engineering.Tests.csproj", "{12269FD9-6521-4CCE-8B33-A524D34D56A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TheOpenMathLibrary.GeneralMathematics.Tests", "TheOpenMathLibrary.GeneralMathematics.Tests\TheOpenMathLibrary.GeneralMathematics.Tests.csproj", "{D23A3C26-898E-4C99-94F1-2510D0A7BDE8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +33,18 @@ Global
 		{AC609FA3-3968-430B-AEBF-B3BF3D7DCB6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AC609FA3-3968-430B-AEBF-B3BF3D7DCB6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AC609FA3-3968-430B-AEBF-B3BF3D7DCB6F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2824889E-FC0E-4A26-8388-C20AF8303375}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2824889E-FC0E-4A26-8388-C20AF8303375}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2824889E-FC0E-4A26-8388-C20AF8303375}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2824889E-FC0E-4A26-8388-C20AF8303375}.Release|Any CPU.Build.0 = Release|Any CPU
+		{12269FD9-6521-4CCE-8B33-A524D34D56A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{12269FD9-6521-4CCE-8B33-A524D34D56A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{12269FD9-6521-4CCE-8B33-A524D34D56A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{12269FD9-6521-4CCE-8B33-A524D34D56A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D23A3C26-898E-4C99-94F1-2510D0A7BDE8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D23A3C26-898E-4C99-94F1-2510D0A7BDE8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D23A3C26-898E-4C99-94F1-2510D0A7BDE8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D23A3C26-898E-4C99-94F1-2510D0A7BDE8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
