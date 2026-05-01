@@ -1,161 +1,109 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace TheOpenMathLibrary.GeneralMathematics
+﻿namespace TheOpenMathLibrary.GeneralMathematics
 {
     /// <summary>
-    /// Wave theory - the study of the properties of waves
+    /// Provides helper formulas for basic wave theory relationships.
     /// </summary>
     public class WaveTheory
     {
         /// <summary>
-        /// Wavelength function 
+        /// Calculates wavelength from wave speed and frequency.
         /// </summary>
-        /// <param name="waveSpeed"></param>
-        /// <param name="frequency"></param>
-        /// <returns></returns>
         public static double Wavelength(double waveSpeed, double frequency)
         {
-            double wavelength = 0;
-            wavelength = waveSpeed / frequency;
-            return wavelength;
+            EnsureNonZero(frequency, nameof(frequency));
+            return waveSpeed / frequency;
         }
 
         /// <summary>
-        /// Wave vector function 
+        /// Calculates wave vector magnitude from wave speed and frequency.
         /// </summary>
-        /// <param name="waveSpeed"></param>
-        /// <param name="frequency"></param>
-        /// <returns></returns>
         public static double WaveVector(double waveSpeed, double frequency)
         {
-            double waveVector = 0;
-            waveVector = 2 * 3.14159 * frequency / waveSpeed;
-            return waveVector;
+            EnsureNonZero(waveSpeed, nameof(waveSpeed));
+            return 2d * Math.PI * frequency / waveSpeed;
         }
 
         /// <summary>
-        /// Frequency function 
+        /// Calculates frequency from wave speed and wavelength.
         /// </summary>
-        /// <param name="waveSpeed"></param>
-        /// <param name="wavelength"></param>
-        /// <returns></returns>
         public static double Frequency(double waveSpeed, double wavelength)
         {
-            double frequency = 0;
-            frequency = waveSpeed / wavelength;
-            return frequency;
+            EnsureNonZero(wavelength, nameof(wavelength));
+            return waveSpeed / wavelength;
         }
 
         /// <summary>
-        /// Angular frequency function 
+        /// Calculates angular frequency from frequency.
         /// </summary>
-        /// <param name="frequency"></param>
-        /// <returns></returns>
         public static double AngularFrequency(double frequency)
         {
-            double angularFrequency = 0;
-            angularFrequency = 2 * 3.14159 * frequency;
-            return angularFrequency;
+            return 2d * Math.PI * frequency;
         }
 
         /// <summary>
-        /// Oscillatory velocity 
+        /// Calculates oscillatory velocity from amplitude, angular frequency, time, and phase.
         /// </summary>
-        /// <param name="amplitude"></param>
-        /// <param name="angularFrequency"></param>
-        /// <param name="time"></param>
-        /// <param name="phase"></param>
-        /// <returns></returns>
         public static double OscillatoryVelocity(double amplitude, double angularFrequency, double time, double phase)
         {
-            double oscillatoryVelocity = 0;
-            oscillatoryVelocity = amplitude * Math.Sin(angularFrequency * time + phase);
-            return oscillatoryVelocity;
+            return amplitude * Math.Sin(angularFrequency * time + phase);
         }
 
         /// <summary>
-        /// Oscillatory acceleration 
+        /// Calculates oscillatory acceleration from amplitude, angular frequency, time, and phase.
         /// </summary>
-        /// <param name="amplitude"></param>
-        /// <param name="angularFrequency"></param>
-        /// <param name="time"></param>
-        /// <param name="phase"></param>
-        /// <returns></returns>
         public static double OscillatoryAcceleration(double amplitude, double angularFrequency, double time, double phase)
         {
-            double oscillatoryAcceleration = 0;
-            oscillatoryAcceleration = amplitude * angularFrequency * Math.Cos(angularFrequency * time + phase);
-            return oscillatoryAcceleration;
+            return amplitude * angularFrequency * Math.Cos(angularFrequency * time + phase);
         }
 
         /// <summary>
-        /// Phase velocity 
+        /// Calculates phase velocity from angular frequency and wave vector magnitude.
         /// </summary>
-        /// <param name="waveSpeed"></param>
-        /// <param name="waveVector"></param>
-        /// <returns></returns>
         public static double PhaseVelocity(double waveSpeed, double waveVector)
         {
-            double phaseVelocity = 0;
-            phaseVelocity = waveSpeed / waveVector;
-            return phaseVelocity;
+            EnsureNonZero(waveVector, nameof(waveVector));
+            return waveSpeed / waveVector;
         }
 
         /// <summary>
-        /// Group velocity 
+        /// Calculates group velocity from wave speed and wave vector magnitude.
         /// </summary>
-        /// <param name="waveSpeed"></param>
-        /// <param name="waveVector"></param>
-        /// <returns></returns>
         public static double GroupVelocity(double waveSpeed, double waveVector)
         {
-            double groupVelocity = 0;
-            groupVelocity = waveSpeed / waveVector;
-            return groupVelocity;
+            EnsureNonZero(waveVector, nameof(waveVector));
+            return waveSpeed / waveVector;
         }
 
         /// <summary>
-        /// Time delay 
+        /// Calculates time delay from time and phase offset.
         /// </summary>
-        /// <param name="time"></param>
-        /// <param name="phase"></param>
-        /// <returns></returns>
         public static double TimeDelay(double time, double phase)
         {
-            double timeDelay = 0;
-            timeDelay = time - phase;
-            return timeDelay;
+            return time - phase;
         }
 
         /// <summary>
-        /// Phase difference 
+        /// Calculates phase difference between two phases.
         /// </summary>
-        /// <param name="phase1"></param>
-        /// <param name="phase2"></param>
-        /// <returns></returns>
         public static double PhaseDifference(double phase1, double phase2)
         {
-            double phaseDifference = 0;
-            phaseDifference = phase1 - phase2;
-            return phaseDifference;
+            return phase1 - phase2;
         }
 
         /// <summary>
-        /// Phase function
+        /// Calculates the phase of a traveling wave.
         /// </summary>
-        /// <param name="waveVector"></param>
-        /// <param name="position"></param>
-        /// <param name="time"></param>
-        /// <param name="phase"></param>
-        /// <returns></returns>
         public static double Phase(double waveVector, double position, double time, double phase)
         {
-            phase = waveVector * position - 2 * 3.14159 * time + phase;
-            return phase;
+            return waveVector * position - 2d * Math.PI * time + phase;
+        }
+
+        private static void EnsureNonZero(double value, string parameterName)
+        {
+            if (value == 0d)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "The value must not be zero.");
+            }
         }
     }
 }

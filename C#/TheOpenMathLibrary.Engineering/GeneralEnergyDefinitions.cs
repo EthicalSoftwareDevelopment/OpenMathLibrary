@@ -1,74 +1,68 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace TheOpenMathLibrary.Engineering
 {
+    /// <summary>
+    /// Provides general mechanical energy and work formulas.
+    /// </summary>
     public class GeneralEnergyDefinitions
     {
         /// <summary>
-        /// Mechanical work function
+        /// Calculates mechanical work.
         /// </summary>
-        /// <param name="force"></param>
-        /// <param name="displacement"></param>
-        /// <param name="angle"></param>
-        /// <returns></returns>
+        /// <param name="force">The applied force magnitude.</param>
+        /// <param name="displacement">The displacement magnitude.</param>
+        /// <param name="angle">The angle between the force and displacement vectors, in radians.</param>
+        /// <returns>The mechanical work.</returns>
         public static double MechanicalWork(double force, double displacement, double angle)
         {
-            double work = 0;
-            work = force * displacement * Math.Cos(angle);
-            return work;
+            return force * displacement * Math.Cos(angle);
         }
 
         /// <summary>
-        /// Work done on Mechancial System function
+        /// Calculates work done on a mechanical system.
         /// </summary>
-        /// <param name="force"></param>
-        /// <param name="displacement"></param>
-        /// <param name="angle"></param>
-        /// <returns></returns>
+        /// <param name="force">The applied force magnitude.</param>
+        /// <param name="displacement">The displacement magnitude.</param>
+        /// <param name="angle">The angle between the force and displacement vectors, in radians.</param>
+        /// <returns>The work done on the system.</returns>
         public static double WorkDoneOnMechanicalSystem(double force, double displacement, double angle)
         {
-            double workDoneOnMechanicalSystem = 0;
-            workDoneOnMechanicalSystem = force * displacement * Math.Cos(angle);
-            return workDoneOnMechanicalSystem;
+            return force * displacement * Math.Cos(angle);
         }
 
         /// <summary>
-        /// potential energy function
+        /// Calculates gravitational potential energy.
         /// </summary>
-        /// <param name="mass"></param>
-        /// <param name="height"></param>
-        /// <param name="gravity"></param>
-        /// <returns></returns>
+        /// <param name="mass">The mass of the object.</param>
+        /// <param name="height">The height relative to a reference point.</param>
+        /// <param name="gravity">The gravitational acceleration.</param>
+        /// <returns>The potential energy.</returns>
         public static double PotentialEnergy(double mass, double height, double gravity)
         {
-            double potentialEnergy = 0;
-            potentialEnergy = mass * height * gravity;
-            return potentialEnergy;
+            return mass * height * gravity;
         }
 
         /// <summary>
-        /// Mechanical energy function
+        /// Calculates total mechanical energy from kinetic and potential energy components.
         /// </summary>
-        /// <param name="kineticEnergy"></param>
-        /// <param name="potentialEnergy"></param>
-        /// <returns></returns>
+        /// <param name="kineticEnergy">The kinetic energy component.</param>
+        /// <param name="potentialEnergy">The potential energy component.</param>
+        /// <returns>The total mechanical energy.</returns>
         public static double MechanicalEnergy(double kineticEnergy, double potentialEnergy)
         {
-            double mechanicalEnergy = 0;
-            mechanicalEnergy = kineticEnergy + potentialEnergy;
-            return mechanicalEnergy;
+            return kineticEnergy + potentialEnergy;
         }
 
-        //Mechaical power function
+        /// <summary>
+        /// Calculates mechanical power from force and velocity.
+        /// </summary>
+        /// <param name="force">The applied force.</param>
+        /// <param name="velocity">The velocity.</param>
+        /// <returns>The mechanical power.</returns>
         public static double MechanicalPower(double force, double velocity)
         {
-            double mechanicalPower = 0;
-            mechanicalPower = force * velocity;
-            return mechanicalPower;
+            return force * velocity;
         }
     }
 }

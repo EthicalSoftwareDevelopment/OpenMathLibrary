@@ -1,62 +1,77 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace TheOpenMathLibrary.Engineering
 {
     /// <summary>
-    /// Derived Dynamic Quantities library - derived dynamic quantities of macroscopic objects.
+    /// Provides helper formulas for derived dynamic quantities.
     /// </summary>
     public class DerivedDynamicQuantities
     {
-        //Momentum function
+        /// <summary>
+        /// Calculates linear momentum.
+        /// </summary>
+        /// <param name="mass">The mass of the object.</param>
+        /// <param name="velocity">The velocity of the object.</param>
+        /// <returns>The momentum.</returns>
         public static double Momentum(double mass, double velocity)
         {
-            double momentum = 0;
-            momentum = mass * velocity;
-            return momentum;
+            return mass * velocity;
         }
 
-        //Force function
+        /// <summary>
+        /// Calculates force from mass and acceleration.
+        /// </summary>
+        /// <param name="mass">The mass of the object.</param>
+        /// <param name="acceleration">The acceleration of the object.</param>
+        /// <returns>The force.</returns>
         public static double Force(double mass, double acceleration)
         {
-            double force = 0;
-            force = mass * acceleration;
-            return force;
+            return mass * acceleration;
         }
 
-        //Impulse function
+        /// <summary>
+        /// Calculates impulse from force and time.
+        /// </summary>
+        /// <param name="force">The applied force.</param>
+        /// <param name="time">The duration of the force application.</param>
+        /// <returns>The impulse.</returns>
         public static double Impulse(double force, double time)
         {
-            double impulse = 0;
-            impulse = force * time;
-            return impulse;
+            return force * time;
         }
 
-        //Angular momentum function
+        /// <summary>
+        /// Calculates angular momentum for a point mass moving tangentially.
+        /// </summary>
+        /// <param name="mass">The mass of the object.</param>
+        /// <param name="velocity">The tangential velocity.</param>
+        /// <param name="radius">The radial distance from the axis.</param>
+        /// <returns>The angular momentum.</returns>
         public static double AngularMomentum(double mass, double velocity, double radius)
         {
-            double angularMomentum = 0;
-            angularMomentum = mass * velocity * radius;
-            return angularMomentum;
+            return mass * velocity * radius;
         }
 
-        //Torque function
+        /// <summary>
+        /// Calculates torque from force and radius.
+        /// </summary>
+        /// <param name="force">The applied force.</param>
+        /// <param name="radius">The lever arm length.</param>
+        /// <returns>The torque.</returns>
         public static double Torque(double force, double radius)
         {
-            double torque = 0;
-            torque = force * radius;
-            return torque;
+            return force * radius;
         }
 
-        //Angular impulse function
+        /// <summary>
+        /// Calculates angular impulse from torque and time.
+        /// </summary>
+        /// <param name="torque">The torque applied.</param>
+        /// <param name="time">The duration of the torque application.</param>
+        /// <returns>The angular impulse.</returns>
         public static double AngularImpulse(double torque, double time)
         {
-            double angularImpulse = 0;
-            angularImpulse = torque * time;
-            return angularImpulse;
+            return torque * time;
         }
     }
 }

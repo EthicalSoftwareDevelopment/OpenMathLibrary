@@ -7,86 +7,94 @@ using System.Threading.Tasks;
 namespace TheOpenMathLibrary.Engineering
 {
     /// <summary>
-    /// Kinematics library - the branch of classical mechanics which describes the motion of points, bodies (objects), and systems of bodies (groups of objects) without considering the forces that cause them to move.
+    /// Provides basic kinematics formulas for translational and angular motion.
     /// </summary>
     public class Kinematics
     {
         /// <summary>
-        /// velocity function 
+        /// Calculates velocity from displacement and elapsed time.
         /// </summary>
-        /// <param name="displacement"></param>
-        /// <param name="time"></param>
-        /// <returns></returns>
+        /// <param name="displacement">The displacement.</param>
+        /// <param name="time">The elapsed time.</param>
+        /// <returns>The velocity.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="time"/> is zero.</exception>
         public static double Velocity(double displacement, double time)
         {
-            double velocity = 0;
-            velocity = displacement / time;
-            return velocity;
+            EnsureNonZero(time, nameof(time));
+            return displacement / time;
         }
 
         /// <summary>
-        /// accelartion function 
+        /// Calculates acceleration from velocity change and elapsed time.
         /// </summary>
-        /// <param name="velocity"></param>
-        /// <param name="time"></param>
-        /// <returns></returns>
+        /// <param name="velocity">The change in velocity.</param>
+        /// <param name="time">The elapsed time.</param>
+        /// <returns>The acceleration.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="time"/> is zero.</exception>
         public static double Acceleration(double velocity, double time)
         {
-            double acceleration = 0;
-            acceleration = velocity / time;
-            return acceleration;
+            EnsureNonZero(time, nameof(time));
+            return velocity / time;
         }
 
         /// <summary>
-        /// jerk function 
+        /// Calculates jerk from acceleration change and elapsed time.
         /// </summary>
-        /// <param name="acceleration"></param>
-        /// <param name="time"></param>
-        /// <returns></returns>
+        /// <param name="acceleration">The change in acceleration.</param>
+        /// <param name="time">The elapsed time.</param>
+        /// <returns>The jerk.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="time"/> is zero.</exception>
         public static double Jerk(double acceleration, double time)
         {
-            double jerk = 0;
-            jerk = acceleration / time;
-            return jerk;
+            EnsureNonZero(time, nameof(time));
+            return acceleration / time;
         }
 
         /// <summary>
-        /// jounce function 
+        /// Calculates jounce from jerk change and elapsed time.
         /// </summary>
-        /// <param name="jerk"></param>
-        /// <param name="time"></param>
-        /// <returns></returns>
+        /// <param name="jerk">The change in jerk.</param>
+        /// <param name="time">The elapsed time.</param>
+        /// <returns>The jounce.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="time"/> is zero.</exception>
         public static double Jounce(double jerk, double time)
         {
-            double jounce = 0;
-            jounce = jerk / time;
-            return jounce;
+            EnsureNonZero(time, nameof(time));
+            return jerk / time;
         }
 
         /// <summary>
-        /// angular acceleration function 
+        /// Calculates angular acceleration from angular velocity change and elapsed time.
         /// </summary>
-        /// <param name="angularVelocity"></param>
-        /// <param name="time"></param>
-        /// <returns></returns>
+        /// <param name="angularVelocity">The change in angular velocity.</param>
+        /// <param name="time">The elapsed time.</param>
+        /// <returns>The angular acceleration.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="time"/> is zero.</exception>
         public static double AngularAcceleration(double angularVelocity, double time)
         {
-            double angularAcceleration = 0;
-            angularAcceleration = angularVelocity / time;
-            return angularAcceleration;
+            EnsureNonZero(time, nameof(time));
+            return angularVelocity / time;
         }
 
         /// <summary>
-        /// angular jerk function 
+        /// Calculates angular jerk from angular acceleration change and elapsed time.
         /// </summary>
-        /// <param name="angularAcceleration"></param>
-        /// <param name="time"></param>
-        /// <returns></returns>
+        /// <param name="angularAcceleration">The change in angular acceleration.</param>
+        /// <param name="time">The elapsed time.</param>
+        /// <returns>The angular jerk.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="time"/> is zero.</exception>
         public static double AngularJerk(double angularAcceleration, double time)
         {
-            double angularJerk = 0;
-            angularJerk = angularAcceleration / time;
-            return angularJerk;
+            EnsureNonZero(time, nameof(time));
+            return angularAcceleration / time;
+        }
+
+        private static void EnsureNonZero(double value, string parameterName)
+        {
+            if (value == 0d)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "The value must not be zero.");
+            }
         }
     }
 }
