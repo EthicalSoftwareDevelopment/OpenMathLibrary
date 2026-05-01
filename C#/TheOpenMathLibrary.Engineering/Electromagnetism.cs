@@ -1,119 +1,121 @@
-﻿@@ -0,0 + 1,118 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace TheOpenMathLibrary.Engineering
 {
     /// <summary>
-    /// ElectroMagnetism class contains methods for calculating various properties of electromagnetism.
+    /// Provides helper formulas for introductory electromagnetism calculations.
     /// </summary>
-    public class ElectroMagnetism
+    public class Electromagnetism
     {
         /// <summary>
-        /// electric field and potential gradient 
+        /// Calculates potential gradient magnitude from electric field and potential difference.
         /// </summary>
-        /// <param name="electricField"></param>
-        /// <param name="potential"></param>
-        /// <returns></returns>
+        /// <param name="electricField">The electric field magnitude.</param>
+        /// <param name="potential">The electric potential difference.</param>
+        /// <returns>The potential gradient.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="potential"/> is zero.</exception>
         public static double ElectricFieldPotentialGradient(double electricField, double potential)
         {
-            double potentialGradient = 0;
-            potentialGradient = electricField / potential;
-            return potentialGradient;
+            EnsureNonZero(potential, nameof(potential));
+            return electricField / potential;
         }
 
         /// <summary>
-        /// electric flux density 
+        /// Calculates electric flux density from electric field and permittivity.
         /// </summary>
-        /// <param name="electricField"></param>
-        /// <param name="permittivity"></param>
-        /// <returns></returns>
+        /// <param name="electricField">The electric field magnitude.</param>
+        /// <param name="permittivity">The permittivity of the medium.</param>
+        /// <returns>The electric flux density.</returns>
         public static double ElectricFluxDensity(double electricField, double permittivity)
         {
-            double electricFluxDensity = 0;
-            electricFluxDensity = electricField / permittivity;
-            return electricFluxDensity;
+            return electricField * permittivity;
         }
 
         /// <summary>
-        /// Absolute permittiity 
+        /// Calculates absolute permittivity from electric flux density and electric field.
         /// </summary>
-        /// <param name="electricFluxDensity"></param>
-        /// <param name="electricField"></param>
-        /// <returns></returns>
+        /// <param name="electricFluxDensity">The electric flux density.</param>
+        /// <param name="electricField">The electric field magnitude.</param>
+        /// <returns>The absolute permittivity.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="electricField"/> is zero.</exception>
         public static double AbsolutePermittivity(double electricFluxDensity, double electricField)
         {
-            double absolutePermittivity = 0;
-            absolutePermittivity = electricFluxDensity / electricField;
-            return absolutePermittivity;
+            EnsureNonZero(electricField, nameof(electricField));
+            return electricFluxDensity / electricField;
         }
 
         /// <summary>
-        /// electric dipole moment 
+        /// Calculates electric dipole moment.
         /// </summary>
-        /// <param name="charge"></param>
-        /// <param name="distance"></param>
-        /// <returns></returns>
+        /// <param name="charge">The charge magnitude.</param>
+        /// <param name="distance">The separation distance.</param>
+        /// <returns>The electric dipole moment.</returns>
         public static double ElectricDipoleMoment(double charge, double distance)
         {
-            double electricDipoleMoment = 0;
-            electricDipoleMoment = charge * distance;
-            return electricDipoleMoment;
+            return charge * distance;
         }
 
         /// <summary>
-        /// electric polarization 
+        /// Calculates electric polarization.
         /// </summary>
-        /// <param name="electricDipoleMoment"></param>
-        /// <param name="volume"></param>
-        /// <returns></returns>
+        /// <param name="electricDipoleMoment">The electric dipole moment.</param>
+        /// <param name="volume">The material volume.</param>
+        /// <returns>The electric polarization.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="volume"/> is zero.</exception>
         public static double ElectricPolarization(double electricDipoleMoment, double volume)
         {
-            double electricPolarization = 0;
-            electricPolarization = electricDipoleMoment / volume;
-            return electricPolarization;
+            EnsureNonZero(volume, nameof(volume));
+            return electricDipoleMoment / volume;
         }
 
         /// <summary>
-        /// electric displacement field 
+        /// Calculates electric displacement field from polarization and permittivity.
         /// </summary>
-        /// <param name="electricPolarization"></param>
-        /// <param name="permittivity"></param>
-        /// <returns></returns>
+        /// <param name="electricPolarization">The electric polarization.</param>
+        /// <param name="permittivity">The permittivity of the medium.</param>
+        /// <returns>The electric displacement field.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="permittivity"/> is zero.</exception>
         public static double ElectricDisplacementField(double electricPolarization, double permittivity)
         {
-            double electricDisplacementField = 0;
-            electricDisplacementField = electricPolarization / permittivity;
-            return electricDisplacementField;
+            EnsureNonZero(permittivity, nameof(permittivity));
+            return electricPolarization / permittivity;
         }
 
         /// <summary>
-        /// Electric displacement flux 
+        /// Calculates electric displacement flux.
         /// </summary>
-        /// <param name="electricDisplacementField"></param>
-        /// <param name="area"></param>
-        /// <returns></returns>
+        /// <param name="electricDisplacementField">The electric displacement field.</param>
+        /// <param name="area">The cross-sectional area.</param>
+        /// <returns>The electric displacement flux.</returns>
         public static double ElectricDisplacementFlux(double electricDisplacementField, double area)
         {
-            double electricDisplacementFlux = 0;
-            electricDisplacementFlux = electricDisplacementField * area;
-            return electricDisplacementFlux;
+            return electricDisplacementField * area;
         }
 
         /// <summary>
-        /// Absolute electric potential 
+        /// Calculates absolute electric potential from field and distance.
         /// </summary>
-        /// <param name="electricField"></param>
-        /// <param name="distance"></param>
-        /// <returns></returns>
+        /// <param name="electricField">The electric field magnitude.</param>
+        /// <param name="distance">The displacement distance.</param>
+        /// <returns>The electric potential difference.</returns>
         public static double AbsoluteElectricPotential(double electricField, double distance)
         {
-            double absoluteElectricPotential = 0;
-            absoluteElectricPotential = electricField * distance;
-            return absoluteElectricPotential;
+            return electricField * distance;
         }
+
+        private static void EnsureNonZero(double value, string parameterName)
+        {
+            if (value == 0d)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "The value must not be zero.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Backward-compatible type alias for <see cref="Electromagnetism"/>.
+    /// </summary>
+    public class ElectroMagnetism : Electromagnetism
+    {
     }
 }

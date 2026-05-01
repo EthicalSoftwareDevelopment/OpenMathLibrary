@@ -1,64 +1,56 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace TheOpenMathLibrary.GeneralMathematics
+﻿namespace TheOpenMathLibrary.GeneralMathematics
 {
+    /// <summary>
+    /// Provides basic geometry formulas.
+    /// </summary>
     public class GeometryFunctions
     {
-
         /// <summary>
-        /// Triangle area function 
+        /// Calculates the area of a triangle.
         /// </summary>
-        /// <param name="baseLength"></param>
-        /// <param name="height"></param>
-        /// <returns></returns>
         public static double TriangleArea(double baseLength, double height)
         {
-            double area = 0;
-            area = 0.5 * baseLength * height;
-            return area;
+            EnsureNonNegative(baseLength, nameof(baseLength));
+            EnsureNonNegative(height, nameof(height));
+            return 0.5d * baseLength * height;
         }
 
         /// <summary>
-        /// Cylinder Volume function 
+        /// Calculates the volume of a cylinder.
         /// </summary>
-        /// <param name="radius"></param>
-        /// <param name="height"></param>
-        /// <returns></returns>
         public static double CylinderVolume(double radius, double height)
         {
-            double volume = 0;
-            volume = 3.14159 * radius * radius * height;
-            return volume;
+            EnsureNonNegative(radius, nameof(radius));
+            EnsureNonNegative(height, nameof(height));
+            return Math.PI * radius * radius * height;
         }
 
         /// <summary>
-        /// Sphere Volume function 
+        /// Calculates the volume of a sphere.
         /// </summary>
-        /// <param name="radius"></param>
-        /// <returns></returns>
         public static double SphereVolume(double radius)
         {
-            double volume = 0;
-            volume = 4 / 3 * 3.14159 * radius * radius * radius;
-            return volume;
+            EnsureNonNegative(radius, nameof(radius));
+            return 4d / 3d * Math.PI * radius * radius * radius;
         }
 
         /// <summary>
-        /// Rectangular prism volume function 
+        /// Calculates the volume of a rectangular prism.
         /// </summary>
-        /// <param name="length"></param>
-        /// <param name="width"></param>
-        /// <param name="height"></param>
-        /// <returns></returns>
         public static double RectangularPrismVolume(double length, double width, double height)
         {
-            double volume = 0;
-            volume = length * width * height;
-            return volume;
+            EnsureNonNegative(length, nameof(length));
+            EnsureNonNegative(width, nameof(width));
+            EnsureNonNegative(height, nameof(height));
+            return length * width * height;
+        }
+
+        private static void EnsureNonNegative(double value, string parameterName)
+        {
+            if (value < 0d)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "The value must be non-negative.");
+            }
         }
     }
 }

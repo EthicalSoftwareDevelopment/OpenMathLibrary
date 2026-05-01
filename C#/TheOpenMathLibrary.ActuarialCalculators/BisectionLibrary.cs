@@ -1,117 +1,148 @@
-﻿namespace ActuarialCalculators
+﻿namespace TheOpenMathLibrary.ActuarialCalculators
 {
     /// <summary>
-    /// This BisectionLibrary module in executes a computational technique referred to as the Bisection Method.
+    /// Provides root-finding methods for one-dimensional functions.
     /// </summary>
     public class BisectionLibrary
     {
         /// <summary>
-        /// This method determines the root of a formula (ie: where a function reaches zero), i.e., the value of function(x) for which (f(x) = 0).
+        /// Finds a root of a continuous function on an interval using the bisection method.
         /// </summary>
-        /// <param name="valueA">The starting point of the interval.</param>
-        /// <param name="valueB">The ending point of the interval.</param>
-        /// <param name="tolerance">The acceptable error margin for the root.</param>
+        /// <param name="valueA">The lower bound of the interval.</param>
+        /// <param name="valueB">The upper bound of the interval.</param>
+        /// <param name="tolerance">The absolute error tolerance used as a stopping condition.</param>
         /// <param name="maxIterations">The maximum number of iterations to perform.</param>
-        /// <param name="mathFunction">The function for which the root is being sought, represented as a delegate Func<double, double>.</param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentException"></exception>
+        /// <param name="mathFunction">The function for which a root is sought.</param>
+        /// <returns>An approximation of a root in the interval.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="mathFunction"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="tolerance"/> or <paramref name="maxIterations"/> is invalid.</exception>
+        /// <exception cref="ArgumentException">Thrown when the interval does not bracket a root.</exception>
         public static double Bisection(double valueA, double valueB, double tolerance, int maxIterations, Func<double, double> mathFunction)
         {
-            double functionA = mathFunction(valueA);
-            double functionB = mathFunction(valueB);
-            if (functionA * functionB > 0)
-            {
-                throw new ArgumentException("function(a) and function(b) must have opposite signs");
-            }
-            double c = 0;
-            for (int i = 0; i < maxIterations; i++)
-            {
-                c = (valueA + valueB) / 2;
-                double functionC = mathFunction(c);
-                if (Math.Abs(functionC) < tolerance)
-                {
-                    break;
-                }
-                if (functionA * functionC < 0)
-                {
-                    valueB = c;
-                    functionB = functionC;
-                }
-                else
-                {
-                    valueA = c;
-                    functionA = functionC;
-                }
-            }
-            return c;
+            return SolveByIntervalHalving(valueA, valueB, tolerance, maxIterations, mathFunction);
         }
 
         /// <summary>
-        /// Newton raphson goalseek method to find the root of a function
+        /// Finds a root of a function using the Newton-Raphson method.
         /// </summary>
-        /// <param name="x0"></param>
-        /// <param name="tolerance"></param>
-        /// <param name="maxIterations"></param>
-        /// <param name="mathFunction"></param>
-        /// <param name="mathFunctionDerivative"></param>
-        /// <returns></returns>
+        /// <param name="x0">The initial estimate.</param>
+        /// <param name="tolerance">The absolute error tolerance used as a stopping condition.</param>
+        /// <param name="maxIterations">The maximum number of iterations to perform.</param>
+        /// <param name="mathFunction">The function for which a root is sought.</param>
+        /// <param name="mathFunctionDerivative">The derivative of <paramref name="mathFunction"/>.</param>
+        /// <returns>An approximation of a root near <paramref name="x0"/>.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when a delegate argument is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="tolerance"/> or <paramref name="maxIterations"/> is invalid.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the derivative becomes zero during iteration.</exception>
         public static double NewtonRaphson(double x0, double tolerance, int maxIterations, Func<double, double> mathFunction, Func<double, double> mathFunctionDerivative)
         {
-            double x = x0;
-            for (int i = 0; i < maxIterations; i++)
+            ValidateCommonInputs(tolerance, maxIterations);
+
+            ArgumentNullException.ThrowIfNull(mathFunction);
+            ArgumentNullException.ThrowIfNull(mathFunctionDerivative);
+
+            var current = x0;
+            for (var iteration = 0; iteration < maxIterations; iteration++)
             {
-                double functionX = mathFunction(x);
-                double derivativeX = mathFunctionDerivative(x);
-                double x1 = x - functionX / derivativeX;
-                if (Math.Abs(x1 - x) < tolerance)
+                var functionValue = mathFunction(current);
+                if (Math.Abs(functionValue) <= tolerance)
                 {
-                    break;
+                    return current;
                 }
-                x = x1;
+
+                var derivativeValue = mathFunctionDerivative(current);
+                if (Math.Abs(derivativeValue) <= double.Epsilon)
+                {
+                    throw new InvalidOperationException("The derivative evaluated to zero during the Newton-Raphson iteration.");
+                }
+
+                var next = current - functionValue / derivativeValue;
+                if (Math.Abs(next - current) <= tolerance)
+                {
+                    return next;
+                }
+
+                current = next;
             }
-            return x;
+
+            return current;
         }
 
         /// <summary>
-        /// Binomial goalseek calculator to find the root of a function
+        /// Finds a root of a function using the same interval-halving approach as the bisection method.
         /// </summary>
-        /// <param name="valueA"></param>
-        /// <param name="valueB"></param>
-        /// <param name="tolerance"></param>
-        /// <param name="maxIterations"></param>
-        /// <param name="mathFunction"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentException"></exception>
+        /// <param name="valueA">The lower bound of the interval.</param>
+        /// <param name="valueB">The upper bound of the interval.</param>
+        /// <param name="tolerance">The absolute error tolerance used as a stopping condition.</param>
+        /// <param name="maxIterations">The maximum number of iterations to perform.</param>
+        /// <param name="mathFunction">The function for which a root is sought.</param>
+        /// <returns>An approximation of a root in the interval.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="mathFunction"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="tolerance"/> or <paramref name="maxIterations"/> is invalid.</exception>
+        /// <exception cref="ArgumentException">Thrown when the interval does not bracket a root.</exception>
         public static double Binomial(double valueA, double valueB, double tolerance, int maxIterations, Func<double, double> mathFunction)
         {
-            double functionA = mathFunction(valueA);
-            double functionB = mathFunction(valueB);
+            return SolveByIntervalHalving(valueA, valueB, tolerance, maxIterations, mathFunction);
+        }
+
+        private static double SolveByIntervalHalving(double valueA, double valueB, double tolerance, int maxIterations, Func<double, double> mathFunction)
+        {
+            ValidateCommonInputs(tolerance, maxIterations);
+            ArgumentNullException.ThrowIfNull(mathFunction);
+
+            var functionA = mathFunction(valueA);
+            if (Math.Abs(functionA) <= tolerance)
+            {
+                return valueA;
+            }
+
+            var functionB = mathFunction(valueB);
+            if (Math.Abs(functionB) <= tolerance)
+            {
+                return valueB;
+            }
+
             if (functionA * functionB > 0)
             {
-                throw new ArgumentException("function(a) and function(b) must have opposite signs");
+                throw new ArgumentException("function(a) and function(b) must have opposite signs.");
             }
-            double c = 0;
-            for (int i = 0; i < maxIterations; i++)
+
+            var midpoint = (valueA + valueB) / 2d;
+            for (var iteration = 0; iteration < maxIterations; iteration++)
             {
-                c = (valueA + valueB) / 2;
-                double functionC = mathFunction(c);
-                if (Math.Abs(functionC) < tolerance)
+                midpoint = (valueA + valueB) / 2d;
+                var functionMidpoint = mathFunction(midpoint);
+
+                if (Math.Abs(functionMidpoint) <= tolerance || Math.Abs(valueB - valueA) / 2d <= tolerance)
                 {
-                    break;
+                    return midpoint;
                 }
-                if (functionA * functionC < 0)
+
+                if (functionA * functionMidpoint < 0)
                 {
-                    valueB = c;
-                    functionB = functionC;
+                    valueB = midpoint;
                 }
                 else
                 {
-                    valueA = c;
-                    functionA = functionC;
+                    valueA = midpoint;
+                    functionA = functionMidpoint;
                 }
             }
-            return c;
+
+            return midpoint;
         }
 
+        private static void ValidateCommonInputs(double tolerance, int maxIterations)
+        {
+            if (tolerance <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(tolerance), "Tolerance must be greater than zero.");
+            }
+
+            if (maxIterations <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxIterations), "The maximum number of iterations must be greater than zero.");
+            }
+        }
     }
 }

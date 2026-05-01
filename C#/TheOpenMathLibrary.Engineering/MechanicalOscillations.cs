@@ -1,42 +1,56 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace TheOpenMathLibrary.Engineering
+﻿namespace TheOpenMathLibrary.Engineering
 {
     /// <summary>
-    /// Mechanical energy oscillation functions
+    /// Provides energy formulas for simple and damped harmonic oscillations.
     /// </summary>
     public class MechanicalOscillations
     {
         /// <summary>
-        /// SHM Energy function 
+        /// Calculates the total mechanical energy of a simple harmonic oscillator.
         /// </summary>
-        /// <param name="mass"></param>
-        /// <param name="amplitude"></param>
-        /// <param name="angularFrequency"></param>
-        /// <returns></returns>
-        public static double SHMEnergy(double mass, double amplitude, double angularFrequency)
+        /// <param name="mass">The oscillating mass.</param>
+        /// <param name="amplitude">The oscillation amplitude.</param>
+        /// <param name="angularFrequency">The angular frequency.</param>
+        /// <returns>The total oscillation energy.</returns>
+        public static double ShmEnergy(double mass, double amplitude, double angularFrequency)
         {
-            double energy = 0;
-            energy = 0.5 * mass * amplitude * amplitude * angularFrequency * angularFrequency;
-            return energy;
+            return 0.5d * mass * amplitude * amplitude * angularFrequency * angularFrequency;
         }
 
         /// <summary>
-        /// DHM Energy function 
+        /// Calculates the total mechanical energy of a simple harmonic oscillator.
         /// </summary>
-        /// <param name="mass"></param>
-        /// <param name="amplitude"></param>
-        /// <param name="angularFrequency"></param>
-        /// <returns></returns>
+        /// <param name="mass">The oscillating mass.</param>
+        /// <param name="amplitude">The oscillation amplitude.</param>
+        /// <param name="angularFrequency">The angular frequency.</param>
+        /// <returns>The total oscillation energy.</returns>
+        public static double SHMEnergy(double mass, double amplitude, double angularFrequency)
+        {
+            return ShmEnergy(mass, amplitude, angularFrequency);
+        }
+
+        /// <summary>
+        /// Calculates the total energy of a damped harmonic oscillator using the same instantaneous form.
+        /// </summary>
+        /// <param name="mass">The oscillating mass.</param>
+        /// <param name="amplitude">The oscillation amplitude.</param>
+        /// <param name="angularFrequency">The angular frequency.</param>
+        /// <returns>The oscillation energy.</returns>
+        public static double DhmEnergy(double mass, double amplitude, double angularFrequency)
+        {
+            return 0.5d * mass * amplitude * amplitude * angularFrequency * angularFrequency;
+        }
+
+        /// <summary>
+        /// Calculates the total energy of a damped harmonic oscillator using the same instantaneous form.
+        /// </summary>
+        /// <param name="mass">The oscillating mass.</param>
+        /// <param name="amplitude">The oscillation amplitude.</param>
+        /// <param name="angularFrequency">The angular frequency.</param>
+        /// <returns>The oscillation energy.</returns>
         public static double DHMEnergy(double mass, double amplitude, double angularFrequency)
         {
-            double energy = 0;
-            energy = 0.5 * mass * amplitude * amplitude * angularFrequency * angularFrequency;
-            return energy;
+            return DhmEnergy(mass, amplitude, angularFrequency);
         }
     }
 }

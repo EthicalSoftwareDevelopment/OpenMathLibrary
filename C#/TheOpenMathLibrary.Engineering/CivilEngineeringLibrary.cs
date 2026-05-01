@@ -1,393 +1,268 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace TheOpenMathLibrary.Engineering
+﻿namespace TheOpenMathLibrary.Engineering
 {
     /// <summary>
-    /// Civil Engineering Library description: This library contains functions for civil engineering calculations.
+    /// Provides helper formulas for introductory civil engineering calculations.
     /// </summary>
-    /// <remarks>
-    /// This library is for educational purposes and should not be used in professional engineering applications.
-    /// You use this library at your own risk.
-    /// </remarks>
     public class CivilEngineeringLibrary
     {
         /// <summary>
-        /// Cement quantity function 
+        /// Calculates the cement portion of a mix by ratio.
         /// </summary>
-        /// <param name="volume"></param>
-        /// <param name="ratio"></param>
-        /// <returns></returns>
         public static double CementQuantity(double volume, double ratio)
         {
-            double cementQuantity = 0;
-            cementQuantity = volume / (1 + ratio);
-            return cementQuantity;
+            return volume / ValidateMixDenominator(ratio, nameof(ratio));
         }
 
         /// <summary>
-        /// Sand quantity function 
+        /// Calculates the sand portion of a mix by ratio.
         /// </summary>
-        /// <param name="volume"></param>
-        /// <param name="ratio"></param>
-        /// <returns></returns>
         public static double SandQuantity(double volume, double ratio)
         {
-            double sandQuantity = 0;
-            sandQuantity = volume * ratio / (1 + ratio);
-            return sandQuantity;
+            return volume * ratio / ValidateMixDenominator(ratio, nameof(ratio));
         }
 
         /// <summary>
-        /// aggregate quantity function 
+        /// Calculates the aggregate portion of a mix by ratio.
         /// </summary>
-        /// <param name="volume"></param>
-        /// <param name="ratio"></param>
-        /// <returns></returns>
         public static double AggregateQuantity(double volume, double ratio)
         {
-            double aggregateQuantity = 0;
-            aggregateQuantity = volume * ratio / (1 + ratio);
-            return aggregateQuantity;
+            return volume * ratio / ValidateMixDenominator(ratio, nameof(ratio));
         }
 
         /// <summary>
-        /// Slope as a percentage function 
+        /// Calculates slope as a percentage.
         /// </summary>
-        /// <param name="rise"></param>
-        /// <param name="run"></param>
-        /// <returns></returns>
         public static double SlopeAsPercentage(double rise, double run)
         {
-            double slopeAsPercentage = 0;
-            slopeAsPercentage = (rise / run) * 100;
-            return slopeAsPercentage;
+            EnsureNonZero(run, nameof(run));
+            return rise / run * 100d;
         }
 
         /// <summary>
-        /// Slope as a ration function 
+        /// Calculates slope as a ratio.
         /// </summary>
-        /// <param name="rise"></param>
-        /// <param name="run"></param>
-        /// <returns></returns>
         public static double SlopeAsRatio(double rise, double run)
         {
-            double slopeAsRatio = 0;
-            slopeAsRatio = rise / run;
-            return slopeAsRatio;
+            EnsureNonZero(run, nameof(run));
+            return rise / run;
         }
 
         /// <summary>
-        /// earthwork volume of cut or fill function 
+        /// Calculates earthwork volume from cross-sectional area and depth.
         /// </summary>
-        /// <param name="area"></param>
-        /// <param name="depth"></param>
-        /// <returns></returns>
         public static double EarthworkVolume(double area, double depth)
         {
-            double earthworkVolume = 0;
-            earthworkVolume = area * depth;
-            return earthworkVolume;
+            return area * depth;
         }
 
         /// <summary>
-        /// Average cross-sectional Area function 
+        /// Calculates the average of two cross-sectional areas.
         /// </summary>
-        /// <param name="area1"></param>
-        /// <param name="area2"></param>
-        /// <returns></returns>
         public static double AverageCrossSectionalArea(double area1, double area2)
         {
-            double averageCrossSectionalArea = 0;
-            averageCrossSectionalArea = (area1 + area2) / 2;
-            return averageCrossSectionalArea;
+            return (area1 + area2) / 2d;
         }
 
         /// <summary>
-        /// Steel quantity function 
+        /// Calculates steel quantity from area and spacing.
         /// </summary>
-        /// <param name="area"></param>
-        /// <param name="spacing"></param>
-        /// <returns></returns>
         public static double SteelQuantity(double area, double spacing)
         {
-            double steelQuantity = 0;
-            steelQuantity = area / spacing;
-            return steelQuantity;
+            EnsureNonZero(spacing, nameof(spacing));
+            return area / spacing;
         }
 
         /// <summary>
-        /// Weight of Steel per Unit Length function 
+        /// Calculates the weight of steel per unit length from bar diameter.
         /// </summary>
-        /// <param name="diameter"></param>
-        /// <returns></returns>
         public static double WeightOfSteelPerUnitLength(double diameter)
         {
-            double weightOfSteelPerUnitLength = 0;
-            weightOfSteelPerUnitLength = 0.006165 * diameter * diameter;
-            return weightOfSteelPerUnitLength;
+            return 0.006165d * diameter * diameter;
         }
 
         /// <summary>
-        /// Unit Weight of steel constant 
+        /// Gets the nominal unit weight of steel in kilograms per cubic meter.
         /// </summary>
-        /// <returns></returns>
         public static double UnitWeightOfSteel()
         {
-            double unitWeightOfSteel = 0;
-            unitWeightOfSteel = 7850;
-            return unitWeightOfSteel;
+            return 7850d;
         }
 
         /// <summary>
-        /// Unit Weight of Concrete constant 
+        /// Gets the nominal unit weight of concrete in kilograms per cubic meter.
         /// </summary>
-        /// <returns></returns>
         public static double UnitWeightOfConcrete()
         {
-            double unitWeightOfConcrete = 0;
-            unitWeightOfConcrete = 2400;
-            return unitWeightOfConcrete;
+            return 2400d;
         }
 
         /// <summary>
-        /// Unit Weight of Brick constant 
+        /// Gets the nominal unit weight of brick in kilograms per cubic meter.
         /// </summary>
-        /// <returns></returns>
         public static double UnitWeightOfBrick()
         {
-            double unitWeightOfBrick = 0;
-            unitWeightOfBrick = 1920;
-            return unitWeightOfBrick;
+            return 1920d;
         }
 
         /// <summary>
-        /// Unit Weight of Water constant 
+        /// Gets the nominal unit weight of water in kilograms per cubic meter.
         /// </summary>
-        /// <returns></returns>
         public static double UnitWeightOfWater()
         {
-            double unitWeightOfWater = 0;
-            unitWeightOfWater = 1000;
-            return unitWeightOfWater;
+            return 1000d;
         }
 
         /// <summary>
-        /// Load bearing capacity function 
+        /// Calculates load-bearing capacity from area and unit weight.
         /// </summary>
-        /// <param name="area"></param>
-        /// <param name="unitWeight"></param>
-        /// <returns></returns>
         public static double LoadBearingCapacity(double area, double unitWeight)
         {
-            double loadBearingCapacity = 0;
-            loadBearingCapacity = area * unitWeight;
-            return loadBearingCapacity;
+            return area * unitWeight;
         }
 
         /// <summary>
-        /// Slab load calculation 
+        /// Calculates slab load from live and dead loads.
         /// </summary>
-        /// <param name="liveLoad"></param>
-        /// <param name="deadLoad"></param>
-        /// <returns></returns>
         public static double SlabLoad(double liveLoad, double deadLoad)
         {
-            double slabLoad = 0;
-            slabLoad = liveLoad + deadLoad;
-            return slabLoad;
+            return liveLoad + deadLoad;
         }
 
         /// <summary>
-        /// Cantilever Beam Deflection 
+        /// Calculates cantilever beam deflection under end loading.
         /// </summary>
-        /// <param name="load"></param>
-        /// <param name="length"></param>
-        /// <param name="modulus"></param>
-        /// <param name="inertia"></param>
-        /// <returns></returns>
         public static double CantileverBeamDeflection(double load, double length, double modulus, double inertia)
         {
-            double cantileverBeamDeflection = 0;
-            cantileverBeamDeflection = (load * length * length * length) / (3 * modulus * inertia);
-            return cantileverBeamDeflection;
+            EnsureNonZero(modulus, nameof(modulus));
+            EnsureNonZero(inertia, nameof(inertia));
+            return load * length * length * length / (3d * modulus * inertia);
         }
 
         /// <summary>
-        /// Moment of Intertia of Rectangular Section 
+        /// Calculates the second moment of area of a rectangular section.
         /// </summary>
-        /// <param name="baseAmount"></param>
-        /// <param name="height"></param>
-        /// <returns></returns>
         public static double MomentOfInertiaOfRectangularSection(double baseAmount, double height)
         {
-            double momentOfInertiaOfRectangularSection = 0;
-            momentOfInertiaOfRectangularSection = (baseAmount * height * height * height) / 12;
-            return momentOfInertiaOfRectangularSection;
+            return baseAmount * height * height * height / 12d;
         }
 
         /// <summary>
-        /// Moment of Intertia of Circular Section 
+        /// Calculates the second moment of area of a circular section.
         /// </summary>
-        /// <param name="diameter"></param>
-        /// <returns></returns>
         public static double MomentOfInertiaOfCircularSection(double diameter)
         {
-            double momentOfInertiaOfCircularSection = 0;
-            momentOfInertiaOfCircularSection = 3.14159 * diameter * diameter * diameter * diameter / 64;
-            return momentOfInertiaOfCircularSection;
+            return Math.PI * diameter * diameter * diameter * diameter / 64d;
         }
 
         /// <summary>
-        /// Bending Moment function 
+        /// Calculates bending moment.
         /// </summary>
-        /// <param name="force"></param>
-        /// <param name="distance"></param>
-        /// <returns></returns>
         public static double BendingMoment(double force, double distance)
         {
-            double bendingMoment = 0;
-            bendingMoment = force * distance;
-            return bendingMoment;
+            return force * distance;
         }
 
         /// <summary>
-        /// Shear force function 
+        /// Calculates shear force as force distributed over distance.
         /// </summary>
-        /// <param name="force"></param>
-        /// <param name="distance"></param>
-        /// <returns></returns>
         public static double ShearForce(double force, double distance)
         {
-            double shearForce = 0;
-            shearForce = force / distance;
-            return shearForce;
+            EnsureNonZero(distance, nameof(distance));
+            return force / distance;
         }
 
         /// <summary>
-        /// Bricks calculation function 
+        /// Calculates a simple brickwork volume measure.
         /// </summary>
-        /// <param name="length"></param>
-        /// <param name="width"></param>
-        /// <param name="height"></param>
-        /// <returns></returns>
         public static double BricksCalculation(double length, double width, double height)
         {
-            double bricksCalculation = 0;
-            bricksCalculation = length * width * height;
-            return bricksCalculation;
+            return length * width * height;
         }
 
         /// <summary>
-        /// Dry Material Quantity for Mortar function 
+        /// Calculates dry material quantity for mortar by ratio.
         /// </summary>
-        /// <param name="volume"></param>
-        /// <param name="ratio"></param>
-        /// <returns></returns>
         public static double DryMaterialQuantityForMortar(double volume, double ratio)
         {
-            double dryMaterialQuantityForMortar = 0;
-            dryMaterialQuantityForMortar = volume * ratio / (1 + ratio);
-            return dryMaterialQuantityForMortar;
+            return volume * ratio / ValidateMixDenominator(ratio, nameof(ratio));
         }
 
         /// <summary>
-        /// Wet mortar volume function 
+        /// Calculates wet mortar volume by ratio.
         /// </summary>
-        /// <param name="volume"></param>
-        /// <param name="ratio"></param>
-        /// <returns></returns>
         public static double WetMortarVolume(double volume, double ratio)
         {
-            double wetMortarVolume = 0;
-            wetMortarVolume = volume / (1 + ratio);
-            return wetMortarVolume;
+            return volume / ValidateMixDenominator(ratio, nameof(ratio));
         }
 
         /// <summary>
-        /// Excavation calculation function 
+        /// Calculates excavation volume.
         /// </summary>
-        /// <param name="length"></param>
-        /// <param name="width"></param>
-        /// <param name="depth"></param>
-        /// <returns></returns>
         public static double ExcavationCalculation(double length, double width, double depth)
         {
-            double excavationCalculation = 0;
-            excavationCalculation = length * width * depth;
-            return excavationCalculation;
+            return length * width * depth;
         }
 
         /// <summary>
-        /// Retaining Wall stability function 
+        /// Calculates a retaining-wall stability estimate.
         /// </summary>
-        /// <param name="height"></param>
-        /// <param name="width"></param>
-        /// <param name="density"></param>
-        /// <param name="angle"></param>
-        /// <returns></returns>
         public static double RetainingWallStability(double height, double width, double density, double angle)
         {
-            double retainingWallStability = 0;
-            retainingWallStability = height * width * density * 0.5 * Math.Sin(angle);
-            return retainingWallStability;
+            return height * width * density * 0.5d * Math.Sin(angle);
         }
 
         /// <summary>
-        /// One-way slab thickness function 
+        /// Calculates one-way slab thickness using a simplified load expression.
         /// </summary>
-        /// <param name="span"></param>
-        /// <param name="load"></param>
-        /// <param name="factor"></param>
-        /// <returns></returns>
         public static double OneWaySlabThickness(double span, double load, double factor)
         {
-            double oneWaySlabThickness = 0;
-            oneWaySlabThickness = (span * span * span * load) / (8 * factor);
-            return oneWaySlabThickness;
+            EnsureNonZero(factor, nameof(factor));
+            return span * span * span * load / (8d * factor);
         }
 
         /// <summary>
-        /// Two-way slab thickness function
+        /// Calculates two-way slab thickness using a simplified load expression.
         /// </summary>
-        /// <param name="span"></param>
-        /// <param name="load"></param>
-        /// <param name="factor"></param>
-        /// <returns></returns>
         public static double TwoWaySlabThickness(double span, double load, double factor)
         {
-            double twoWaySlabThickness = 0;
-            twoWaySlabThickness = (span * span * span * load) / (12 * factor);
-            return twoWaySlabThickness;
+            EnsureNonZero(factor, nameof(factor));
+            return span * span * span * load / (12d * factor);
         }
 
         /// <summary>
-        /// Compaction Factor function
+        /// Calculates compaction factor.
         /// </summary>
-        /// <param name="initialVolume"></param>
-        /// <param name="finalVolume"></param>
-        /// <returns></returns>
         public static double CompactionFactor(double initialVolume, double finalVolume)
         {
-            double compactionFactor = 0;
-            compactionFactor = initialVolume / finalVolume;
-            return compactionFactor;
+            EnsureNonZero(finalVolume, nameof(finalVolume));
+            return initialVolume / finalVolume;
         }
 
         /// <summary>
-        /// Soil Settlement function 
+        /// Calculates soil settlement from initial and final volumes.
         /// </summary>
-        /// <param name="initialVolume"></param>
-        /// <param name="finalVolume"></param>
-        /// <returns></returns>
         public static double SoilSettlement(double initialVolume, double finalVolume)
         {
-            double soilSettlement = 0;
-            soilSettlement = initialVolume - finalVolume;
-            return soilSettlement;
+            return initialVolume - finalVolume;
+        }
+
+        private static double ValidateMixDenominator(double ratio, string parameterName)
+        {
+            var denominator = 1d + ratio;
+            if (denominator == 0d)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "The ratio must not make the denominator equal to zero.");
+            }
+
+            return denominator;
+        }
+
+        private static void EnsureNonZero(double value, string parameterName)
+        {
+            if (value == 0d)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "The value must not be zero.");
+            }
         }
     }
 }

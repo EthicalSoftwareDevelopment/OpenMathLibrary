@@ -1,277 +1,219 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace TheOpenMathLibrary.Engineering
+﻿namespace TheOpenMathLibrary.Engineering
 {
     /// <summary>
-    /// This class contains functions for calculating various properties of light and electromagnetic radiation. It includes functions for calculating magnification, image height, image distance, poynting vector, poynting flux, RMS electric field, radiation momentum, radiant intensity, and radiosity. These functions can be used in physics and engineering applications to analyze and design optical systems.
+    /// Provides helper formulas for introductory optics and photonics calculations.
     /// </summary>
     public class OpticsAndPhotonics
     {
         /// <summary>
-        /// magnification function
+        /// Calculates linear magnification.
         /// </summary>
-        /// <param name="imageDistance"></param>
-        /// <param name="objectDistance"></param>
-        /// <returns></returns>
         public static double Magnification(double imageDistance, double objectDistance)
         {
-            double magnification = 0;
-            magnification = imageDistance / objectDistance;
-            return magnification;
+            EnsureNonZero(objectDistance, nameof(objectDistance));
+            return imageDistance / objectDistance;
         }
 
         /// <summary>
-        /// image height function
+        /// Calculates image height from magnification and object height.
         /// </summary>
-        /// <param name="magnification"></param>
-        /// <param name="objectHeight"></param>
-        /// <returns></returns>
         public static double ImageHeight(double magnification, double objectHeight)
         {
-            double imageHeight = 0;
-            imageHeight = magnification * objectHeight;
-            return imageHeight;
+            return magnification * objectHeight;
         }
 
         /// <summary>
-        /// image distance function 
+        /// Calculates image distance from focal length and object distance using the thin-lens relation.
         /// </summary>
-        /// <param name="focalLength"></param>
-        /// <param name="objectDistance"></param>
-        /// <returns></returns>
         public static double ImageDistance(double focalLength, double objectDistance)
         {
-            double imageDistance = 0;
-            imageDistance = (focalLength * objectDistance) / (objectDistance - focalLength);
-            return imageDistance;
+            var denominator = objectDistance - focalLength;
+            EnsureNonZero(denominator, nameof(objectDistance));
+            return focalLength * objectDistance / denominator;
         }
 
         /// <summary>
-        /// Physical optics poynting vector function 
+        /// Calculates the magnitude of the Poynting vector in a simplified scalar form.
         /// </summary>
-        /// <param name="electricField"></param>
-        /// <param name="magneticField"></param>
-        /// <returns></returns>
         public static double PoyntingVector(double electricField, double magneticField)
         {
-            double poyntingVector = 0;
-            poyntingVector = electricField * magneticField;
-            return poyntingVector;
+            return electricField * magneticField;
         }
 
         /// <summary>
-        /// poyting flux, EM field power flow function 
+        /// Calculates Poynting flux in a simplified scalar form.
         /// </summary>
-        /// <param name="electricField"></param>
-        /// <param name="magneticField"></param>
-        /// <returns></returns>
         public static double PoyntingFlux(double electricField, double magneticField)
         {
-            double poyntingFlux = 0;
-            poyntingFlux = electricField * magneticField;
-            return poyntingFlux;
+            return electricField * magneticField;
         }
 
         /// <summary>
-        /// RMS electric field of Light function 
+        /// Calculates the root-mean-square electric field magnitude.
         /// </summary>
-        /// <param name="electricField"></param>
-        /// <returns></returns>
+        public static double RmSElectricField(double electricField)
+        {
+            return electricField / Math.Sqrt(2d);
+        }
+
+        /// <summary>
+        /// Calculates the root-mean-square electric field magnitude.
+        /// </summary>
+        /// <param name="electricField">The electric field magnitude.</param>
+        /// <returns>The RMS electric field magnitude.</returns>
         public static double RMSElectricField(double electricField)
         {
-            double rmsElectricField = 0;
-            rmsElectricField = electricField / Math.Sqrt(2);
-            return rmsElectricField;
+            return RmSElectricField(electricField);
         }
 
         /// <summary>
-        /// Radiation momentum function 
+        /// Calculates radiation momentum from intensity and speed of light.
         /// </summary>
-        /// <param name="intensity"></param>
-        /// <param name="speedOfLight"></param>
-        /// <returns></returns>
         public static double RadiationMomentum(double intensity, double speedOfLight)
         {
-            double radiationMomentum = 0;
-            radiationMomentum = intensity / speedOfLight;
-            return radiationMomentum;
+            EnsureNonZero(speedOfLight, nameof(speedOfLight));
+            return intensity / speedOfLight;
         }
 
         /// <summary>
-        /// radiant intensity function 
+        /// Calculates radiant intensity.
         /// </summary>
-        /// <param name="power"></param>
-        /// <param name="solidAngle"></param>
-        /// <returns></returns>
         public static double RadiantIntensity(double power, double solidAngle)
         {
-            double radiantIntensity = 0;
-            radiantIntensity = power / solidAngle;
-            return radiantIntensity;
+            EnsureNonZero(solidAngle, nameof(solidAngle));
+            return power / solidAngle;
         }
 
         /// <summary>
-        /// Radiosity function 
+        /// Calculates radiosity using the Stefan-Boltzmann relation.
         /// </summary>
-        /// <param name="emissivity"></param>
-        /// <param name="stefanBoltzmannConstant"></param>
-        /// <param name="temperature"></param>
-        /// <returns></returns>
         public static double Radiosity(double emissivity, double stefanBoltzmannConstant, double temperature)
         {
-            double radiosity = 0;
-            radiosity = emissivity * stefanBoltzmannConstant * Math.Pow(temperature, 4);
-            return radiosity;
+            return emissivity * stefanBoltzmannConstant * Math.Pow(temperature, 4d);
         }
 
         /// <summary>
-        /// Spectral radiance function 
+        /// Calculates spectral radiance from radiance per wavelength interval.
         /// </summary>
-        /// <param name="radiance"></param>
-        /// <param name="wavelength"></param>
-        /// <returns></returns>
         public static double SpectralRadiance(double radiance, double wavelength)
         {
-            double spectralRadiance = 0;
-            spectralRadiance = radiance / wavelength;
-            return spectralRadiance;
+            EnsureNonZero(wavelength, nameof(wavelength));
+            return radiance / wavelength;
         }
 
         /// <summary>
-        /// spectral irradiance function 
+        /// Calculates spectral irradiance from irradiance per wavelength interval.
         /// </summary>
-        /// <param name="irradiance"></param>
-        /// <param name="wavelength"></param>
-        /// <returns></returns>
         public static double SpectralIrradiance(double irradiance, double wavelength)
         {
-            double spectralIrradiance = 0;
-            spectralIrradiance = irradiance / wavelength;
-            return spectralIrradiance;
+            EnsureNonZero(wavelength, nameof(wavelength));
+            return irradiance / wavelength;
         }
 
         /// <summary>
-        /// Energy density in an EM wave 
+        /// Calculates electromagnetic energy density in a simplified scalar form.
         /// </summary>
-        /// <param name="electricField"></param>
-        /// <param name="magneticField"></param>
-        /// <returns></returns>
         public static double EnergyDensity(double electricField, double magneticField)
         {
-            double energyDensity = 0;
-            energyDensity = 0.5 * (electricField * electricField + magneticField * magneticField);
-            return energyDensity;
+            return 0.5d * (electricField * electricField + magneticField * magneticField);
         }
 
         /// <summary>
-        /// Kinetic and potential momenta of light 
+        /// Calculates linear momentum from mass and speed.
         /// </summary>
-        /// <param name="speedOfLight"></param>
-        /// <param name="mass"></param>
-        /// <returns></returns>
         public static double KineticMomentum(double speedOfLight, double mass)
         {
-            double kineticMomentum = 0;
-            kineticMomentum = speedOfLight * mass;
-            return kineticMomentum;
+            return speedOfLight * mass;
         }
 
         /// <summary>
-        /// Doppler effect for light 
+        /// Calculates a simplified Doppler-shifted frequency for light.
         /// </summary>
-        /// <param name="frequency"></param>
-        /// <param name="speedOfLight"></param>
-        /// <param name="observerSpeed"></param>
-        /// <returns></returns>
         public static double DopplerEffect(double frequency, double speedOfLight, double observerSpeed)
         {
-            double dopplerEffect = 0;
-            dopplerEffect = frequency * (speedOfLight + observerSpeed) / speedOfLight;
-            return dopplerEffect;
+            EnsureNonZero(speedOfLight, nameof(speedOfLight));
+            return frequency * (speedOfLight + observerSpeed) / speedOfLight;
         }
 
         /// <summary>
-        /// cherenkov radiation 
+        /// Calculates the Cherenkov threshold speed in a medium.
         /// </summary>
-        /// <param name="speedOfLight"></param>
-        /// <param name="refractiveIndex"></param>
-        /// <returns></returns>
         public static double CherenkovRadiation(double speedOfLight, double refractiveIndex)
         {
-            double cherenkovRadiation = 0;
-            cherenkovRadiation = speedOfLight / refractiveIndex;
-            return cherenkovRadiation;
+            EnsureNonZero(refractiveIndex, nameof(refractiveIndex));
+            return speedOfLight / refractiveIndex;
         }
 
         /// <summary>
-        /// EM wave components 
+        /// Calculates the magnitude of a simplified electromagnetic wave component vector.
         /// </summary>
-        /// <param name="electricField"></param>
-        /// <param name="magneticField"></param>
-        /// <returns></returns>
+        public static double EmWaveComponent(double electricField, double magneticField)
+        {
+            return Math.Sqrt(electricField * electricField + magneticField * magneticField);
+        }
+
+        /// <summary>
+        /// Calculates the magnitude of a simplified electromagnetic wave component vector.
+        /// </summary>
+        /// <param name="electricField">The electric-field component.</param>
+        /// <param name="magneticField">The magnetic-field component.</param>
+        /// <returns>The combined component magnitude.</returns>
         public static double EMWaveComponent(double electricField, double magneticField)
         {
-            double emWaveComponent = 0;
-            emWaveComponent = Math.Sqrt(electricField * electricField + magneticField * magneticField);
-            return emWaveComponent;
+            return EmWaveComponent(electricField, magneticField);
         }
 
-
         /// <summary>
-        /// Critical angle function 
+        /// Calculates the critical angle for total internal reflection.
         /// </summary>
-        /// <param name="refractiveIndex1"></param>
-        /// <param name="refractiveIndex2"></param>
-        /// <returns></returns>
         public static double CriticalAngle(double refractiveIndex1, double refractiveIndex2)
         {
-            double criticalAngle = 0;
-            criticalAngle = Math.Asin(refractiveIndex2 / refractiveIndex1);
-            return criticalAngle;
+            EnsureNonZero(refractiveIndex1, nameof(refractiveIndex1));
+            var ratio = refractiveIndex2 / refractiveIndex1;
+            if (ratio < -1d || ratio > 1d)
+            {
+                throw new ArgumentOutOfRangeException(nameof(refractiveIndex2), "The refractive-index ratio must be between -1 and 1.");
+            }
+
+            return Math.Asin(ratio);
         }
 
         /// <summary>
-        /// Thin lens equation function 
+        /// Evaluates the thin-lens equation residual.
         /// </summary>
-        /// <param name="focalLength"></param>
-        /// <param name="objectDistance"></param>
-        /// <param name="imageDistance"></param>
-        /// <returns></returns>
         public static double ThinLensEquation(double focalLength, double objectDistance, double imageDistance)
         {
-            double thinLensEquation = 0;
-            thinLensEquation = 1 / focalLength - 1 / objectDistance + 1 / imageDistance;
-            return thinLensEquation;
+            EnsureNonZero(focalLength, nameof(focalLength));
+            EnsureNonZero(objectDistance, nameof(objectDistance));
+            EnsureNonZero(imageDistance, nameof(imageDistance));
+            return 1d / focalLength - 1d / objectDistance + 1d / imageDistance;
         }
 
         /// <summary>
-        /// Image distance in a plane mirror function 
+        /// Calculates image distance for a plane mirror.
         /// </summary>
-        /// <param name="objectDistance"></param>
-        /// <returns></returns>
         public static double ImageDistancePlaneMirror(double objectDistance)
         {
-            double imageDistancePlaneMirror = 0;
-            imageDistancePlaneMirror = -objectDistance;
-            return imageDistancePlaneMirror;
+            return -objectDistance;
         }
 
         /// <summary>
-        /// Spherical mirror equation function 
+        /// Evaluates the spherical mirror equation residual.
         /// </summary>
-        /// <param name="focalLength"></param>
-        /// <param name="objectDistance"></param>
-        /// <param name="imageDistance"></param>
-        /// <returns></returns>
         public static double SphericalMirrorEquation(double focalLength, double objectDistance, double imageDistance)
         {
-            double sphericalMirrorEquation = 0;
-            sphericalMirrorEquation = 1 / focalLength - 1 / objectDistance + 1 / imageDistance;
-            return sphericalMirrorEquation;
+            EnsureNonZero(focalLength, nameof(focalLength));
+            EnsureNonZero(objectDistance, nameof(objectDistance));
+            EnsureNonZero(imageDistance, nameof(imageDistance));
+            return 1d / focalLength - 1d / objectDistance + 1d / imageDistance;
+        }
+
+        private static void EnsureNonZero(double value, string parameterName)
+        {
+            if (value == 0d)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "The value must not be zero.");
+            }
         }
     }
 }

@@ -1,102 +1,107 @@
 namespace TheOpenMathLibrary.Engineering
 {
     /// <summary>
-    /// Classical Mechanics library - macroscopic object descriptions. The most familiar theories of physics.
+    /// Provides classical mechanics helper formulas for mass distribution and rigid-body quantities.
     /// </summary>
     public class ClassicalMechanics
     {
         /// <summary>
-        /// linear mass density
+        /// Calculates linear mass density.
         /// </summary>
-        /// <param name="mass"></param>
-        /// <param name="length"></param>
-        /// <returns></returns>
+        /// <param name="mass">The mass of the object.</param>
+        /// <param name="length">The length over which the mass is distributed.</param>
+        /// <returns>The mass per unit length.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="length"/> is zero.</exception>
         public static double LinearMassDensity(double mass, double length)
         {
-            double linearMassDensity = 0;
-            linearMassDensity = mass / length;
-            return linearMassDensity;
+            EnsureNonZero(length, nameof(length));
+            return mass / length;
         }
 
         /// <summary>
-        /// surface mass density
+        /// Calculates surface mass density.
         /// </summary>
-        /// <param name="mass"></param>
-        /// <param name="area"></param>
-        /// <returns></returns>
+        /// <param name="mass">The mass of the object.</param>
+        /// <param name="area">The surface area over which the mass is distributed.</param>
+        /// <returns>The mass per unit area.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="area"/> is zero.</exception>
         public static double SurfaceMassDensity(double mass, double area)
         {
-            double surfaceMassDensity = 0;
-            surfaceMassDensity = mass / area;
-            return surfaceMassDensity;
+            EnsureNonZero(area, nameof(area));
+            return mass / area;
         }
 
         /// <summary>
-        /// volumetric mass density
+        /// Calculates volumetric mass density.
         /// </summary>
-        /// <param name="mass"></param>
-        /// <param name="volume"></param>
-        /// <returns></returns>
+        /// <param name="mass">The mass of the object.</param>
+        /// <param name="volume">The volume over which the mass is distributed.</param>
+        /// <returns>The mass per unit volume.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="volume"/> is zero.</exception>
         public static double VolumetricMassDensity(double mass, double volume)
         {
-            double volumetricMassDensity = 0;
-            volumetricMassDensity = mass / volume;
-            return volumetricMassDensity;
+            EnsureNonZero(volume, nameof(volume));
+            return mass / volume;
         }
 
-
         /// <summary>
-        /// Moment of Mass
+        /// Calculates the moment of mass using radius squared weighting.
         /// </summary>
-        /// <param name="mass"></param>
-        /// <param name="radius"></param>
-        /// <returns></returns>
+        /// <param name="mass">The mass.</param>
+        /// <param name="radius">The radial distance.</param>
+        /// <returns>The moment of mass.</returns>
         public static double MomentOfMass(double mass, double radius)
         {
-            double momentOfMass = 0;
-            momentOfMass = mass * radius * radius;
-            return momentOfMass;
+            return mass * radius * radius;
         }
 
         /// <summary>
-        /// Center of mass
+        /// Calculates the center of mass of a two-body system on a line.
         /// </summary>
-        /// <param name="mass1"></param>
-        /// <param name="mass2"></param>
-        /// <param name="radius1"></param>
-        /// <param name="radius2"></param>
-        /// <returns></returns>
+        /// <param name="mass1">The first mass.</param>
+        /// <param name="mass2">The second mass.</param>
+        /// <param name="radius1">The position of the first mass.</param>
+        /// <param name="radius2">The position of the second mass.</param>
+        /// <returns>The center-of-mass position.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the combined mass is zero.</exception>
         public static double CenterOfMass(double mass1, double mass2, double radius1, double radius2)
         {
-            double centerOfMass = 0;
-            centerOfMass = (mass1 * radius1 + mass2 * radius2) / (mass1 + mass2);
-            return centerOfMass;
+            var totalMass = mass1 + mass2;
+            EnsureNonZero(totalMass, nameof(mass2));
+            return (mass1 * radius1 + mass2 * radius2) / totalMass;
         }
 
         /// <summary>
-        /// 2 body reduced mass
+        /// Calculates the reduced mass of a two-body system.
         /// </summary>
-        /// <param name="mass1"></param>
-        /// <param name="mass2"></param>
-        /// <returns></returns>
+        /// <param name="mass1">The first mass.</param>
+        /// <param name="mass2">The second mass.</param>
+        /// <returns>The reduced mass.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the combined mass is zero.</exception>
         public static double ReducedMass(double mass1, double mass2)
         {
-            double reducedMass = 0;
-            reducedMass = (mass1 * mass2) / (mass1 + mass2);
-            return reducedMass;
+            var totalMass = mass1 + mass2;
+            EnsureNonZero(totalMass, nameof(mass2));
+            return mass1 * mass2 / totalMass;
         }
 
         /// <summary>
-        /// moment of intertia 
+        /// Calculates the moment of inertia for a point mass at a distance from the axis of rotation.
         /// </summary>
-        /// <param name="mass"></param>
-        /// <param name="radius"></param>
-        /// <returns></returns>
+        /// <param name="mass">The mass.</param>
+        /// <param name="radius">The distance to the axis.</param>
+        /// <returns>The moment of inertia.</returns>
         public static double MomentOfInertia(double mass, double radius)
         {
-            double momentOfInertia = 0;
-            momentOfInertia = mass * radius * radius;
-            return momentOfInertia;
+            return mass * radius * radius;
+        }
+
+        private static void EnsureNonZero(double value, string parameterName)
+        {
+            if (value == 0d)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "The value must not be zero.");
+            }
         }
     }
 }

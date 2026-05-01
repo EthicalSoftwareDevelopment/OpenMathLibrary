@@ -1,70 +1,94 @@
-﻿using Microsoft.VisualBasic;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-
-namespace ActuarialCalculators
+﻿
+namespace TheOpenMathLibrary.ActuarialCalculators
 {
     /// <summary>
-    /// This MobiusLibrary module calculates the Mobius function for a given number.
+    /// Provides arithmetic and number-theory helper functions.
     /// </summary>
-    /// <remarks>
-    /// The Möbius function is used in various areas of number theory, including:
-    /// Inversion Formulas: It is used in the Möbius inversion formula, which is a technique to invert summatory functions.
-    /// Prime Number Theorems: It appears in the study of the distribution of prime numbers.
-    /// Combinatorial Identities: It is used in combinatorial mathematics to count certain types of structures.
-    /// </remarks>
     public class ArithmeticLibrary
     {
         /// <summary>
-        /// This method calculates the Mobius function for a given number.
+        /// Calculates the Möbius function μ(n).
         /// </summary>
-        /// <param name="number">A positive number, for which the Mobius function is being calculated.</param>
-        /// <returns>The Mobius solution for the given number.</returns>
+        /// <param name="number">The positive integer to evaluate.</param>
+        /// <returns>
+        /// <c>1</c> when <paramref name="number"/> is square-free with an even number of prime factors,
+        /// <c>-1</c> when it is square-free with an odd number of prime factors, and <c>0</c> otherwise.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="number"/> is less than 1.</exception>
         public static int Mobius(int number)
         {
+            if (number < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(number), "Number must be a positive integer.");
+            }
+
             if (number == 1)
             {
                 return 1;
             }
 
+            var remaining = number;
             var primeFactorCount = 0;
 
-            for (var i = 2; i <= number; i++)
+            for (var factor = 2; factor * factor <= remaining; factor++)
             {
-                if (number % i == 0)
+                if (remaining % factor != 0)
                 {
-                    number /= i;
+                    continue;
+                }
 
-                    primeFactorCount++;
+                var multiplicity = 0;
+                while (remaining % factor == 0)
+                {
+                    remaining /= factor;
+                    multiplicity++;
 
-                    if (number % i == 0)
+                    if (multiplicity > 1)
                     {
                         return 0;
                     }
                 }
+
+                primeFactorCount++;
             }
+
+            if (remaining > 1)
+            {
+                primeFactorCount++;
+            }
+
             return primeFactorCount % 2 == 0 ? 1 : -1;
         }
 
-
+        /// <summary>
+        /// Calculates the sum of the positive divisors of a number.
+        /// </summary>
+        /// <param name="number">The positive integer to evaluate.</param>
+        /// <returns>The sum of all positive divisors of <paramref name="number"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="number"/> is less than 1.</exception>
         public static int Sigma(int number)
         {
             if (number < 1)
             {
-                throw new ArgumentException("Number must be a positive integer.");
+                throw new ArgumentOutOfRangeException(nameof(number), "Number must be a positive integer.");
             }
 
-            int sum = 0;
+            var sum = 0;
+            var limit = (int)Math.Sqrt(number);
 
-            for (int i = 1; i <= number; i++)
+            for (var divisor = 1; divisor <= limit; divisor++)
             {
-                if (number % i == 0)
+                if (number % divisor != 0)
                 {
-                    sum += i;
+                    continue;
+                }
+
+                var quotient = number / divisor;
+                sum += divisor;
+
+                if (quotient != divisor)
+                {
+                    sum += quotient;
                 }
             }
 
@@ -72,45 +96,49 @@ namespace ActuarialCalculators
         }
 
         /// <summary>
-        /// 
+        /// Calculates Euler's totient function φ(n).
         /// </summary>
-        /// <param name="number"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentException"></exception>
+        /// <param name="number">The positive integer to evaluate.</param>
+        /// <returns>The count of integers from 1 through <paramref name="number"/> that are coprime to it.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="number"/> is less than 1.</exception>
         public static int Totient(int number)
         {
             if (number < 1)
             {
-                throw new ArgumentException("Number must be a positive integer.");
+                throw new ArgumentOutOfRangeException(nameof(number), "Number must be a positive integer.");
             }
 
-            int result = number;
+            var remaining = number;
+            var result = number;
 
-            for (int i = 2; i * i <= number; i++)
+            for (var factor = 2; factor * factor <= remaining; factor++)
             {
-                if (number % i == 0)
+                if (remaining % factor != 0)
                 {
-                    while (number % i == 0)
-                    {
-                        number /= i;
-                    }
-                    result -= result / i;
+                    continue;
                 }
+
+                while (remaining % factor == 0)
+                {
+                    remaining /= factor;
+                }
+
+                result -= result / factor;
             }
 
-            if (number > 1)
+            if (remaining > 1)
             {
-                result -= result / number;
+                result -= result / remaining;
             }
 
             return result;
         }
 
         /// <summary>
-        /// 
+        /// Counts the number of prime numbers less than or equal to a value.
         /// </summary>
-        /// <param name="number"></param>
-        /// <returns></returns>
+        /// <param name="number">The inclusive upper bound.</param>
+        /// <returns>The number of primes less than or equal to <paramref name="number"/>.</returns>
         public static int PrimeCounting(int number)
         {
             if (number < 2)
@@ -118,27 +146,26 @@ namespace ActuarialCalculators
                 return 0;
             }
 
-            bool[] isPrime = new bool[number + 1];
-            for (int i = 2; i <= number; i++)
-            {
-                isPrime[i] = true;
-            }
+            var isPrime = new bool[number + 1];
+            Array.Fill(isPrime, true, 2, number - 1);
 
-            for (int i = 2; i * i <= number; i++)
+            for (var factor = 2; factor * factor <= number; factor++)
             {
-                if (isPrime[i])
+                if (!isPrime[factor])
                 {
-                    for (int j = i * i; j <= number; j += i)
-                    {
-                        isPrime[j] = false;
-                    }
+                    continue;
+                }
+
+                for (var composite = factor * factor; composite <= number; composite += factor)
+                {
+                    isPrime[composite] = false;
                 }
             }
 
-            int primeCount = 0;
-            for (int i = 2; i <= number; i++)
+            var primeCount = 0;
+            for (var candidate = 2; candidate <= number; candidate++)
             {
-                if (isPrime[i])
+                if (isPrime[candidate])
                 {
                     primeCount++;
                 }
@@ -148,26 +175,27 @@ namespace ActuarialCalculators
         }
 
         /// <summary>
-        /// 
+        /// Calculates the partition number p(n), the number of ways to write a non-negative integer as a sum of positive integers.
         /// </summary>
-        /// <param name="number"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentException"></exception>
+        /// <param name="number">The non-negative integer to partition.</param>
+        /// <returns>The number of additive partitions of <paramref name="number"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="number"/> is negative.</exception>
+        /// <exception cref="OverflowException">Thrown when the result exceeds the range of <see cref="int"/>.</exception>
         public static int Partition(int number)
         {
             if (number < 0)
             {
-                throw new ArgumentException("Number must be a non-negative integer.");
+                throw new ArgumentOutOfRangeException(nameof(number), "Number must be a non-negative integer.");
             }
 
-            int[] partitions = new int[number + 1];
+            var partitions = new int[number + 1];
             partitions[0] = 1;
 
-            for (int i = 1; i <= number; i++)
+            for (var part = 1; part <= number; part++)
             {
-                for (int j = i; j <= number; j++)
+                for (var target = part; target <= number; target++)
                 {
-                    partitions[j] += partitions[j - i];
+                    partitions[target] = checked(partitions[target] + partitions[target - part]);
                 }
             }
 
@@ -175,10 +203,10 @@ namespace ActuarialCalculators
         }
 
         /// <summary>
-        /// 
+        /// Calculates Ω(n), the total number of prime factors counted with multiplicity.
         /// </summary>
-        /// <param name="number"></param>
-        /// <returns></returns>
+        /// <param name="number">The integer to factor.</param>
+        /// <returns>The number of prime factors counted with multiplicity.</returns>
         public static int Omega(int number)
         {
             if (number < 2)
@@ -186,18 +214,19 @@ namespace ActuarialCalculators
                 return 0;
             }
 
-            int totalPrimeFactors = 0;
+            var remaining = number;
+            var totalPrimeFactors = 0;
 
-            for (int i = 2; i * i <= number; i++)
+            for (var factor = 2; factor * factor <= remaining; factor++)
             {
-                while (number % i == 0)
+                while (remaining % factor == 0)
                 {
                     totalPrimeFactors++;
-                    number /= i;
+                    remaining /= factor;
                 }
             }
 
-            if (number > 1)
+            if (remaining > 1)
             {
                 totalPrimeFactors++;
             }
@@ -206,27 +235,80 @@ namespace ActuarialCalculators
         }
 
         /// <summary>
-        /// 
+        /// Calculates Chebyshev's theta function θ(n), the sum of logarithms of the primes up to a bound.
         /// </summary>
-        /// <param name="number"></param>
-        /// <returns></returns>
+        /// <param name="number">The inclusive upper bound.</param>
+        /// <returns>The value of θ(<paramref name="number"/>).</returns>
         public static double ChebyshevTheta(int number)
         {
             if (number < 2)
             {
-                return 0;
+                return 0d;
             }
 
-            double sum = 0;
-            for (int i = 2; i <= number; i++)
+            var sum = 0d;
+            for (var candidate = 2; candidate <= number; candidate++)
             {
-                if (IsPrime(i))
+                if (IsPrime(candidate))
                 {
-                    sum += Math.Log(i);
+                    sum += Math.Log(candidate);
                 }
             }
 
             return sum;
+        }
+
+        /// <summary>
+        /// Calculates Chebyshev's psi function ψ(n), the sum of logarithms over prime powers up to a bound.
+        /// </summary>
+        /// <param name="number">The inclusive upper bound.</param>
+        /// <returns>The value of ψ(<paramref name="number"/>).</returns>
+        public static double ChebyshevPsi(int number)
+        {
+            if (number < 2)
+            {
+                return 0d;
+            }
+
+            var sum = 0d;
+            for (var prime = 2; prime <= number; prime++)
+            {
+                if (!IsPrime(prime))
+                {
+                    continue;
+                }
+
+                long power = prime;
+                while (power <= number)
+                {
+                    sum += Math.Log(prime);
+
+                    if (power > number / prime)
+                    {
+                        break;
+                    }
+
+                    power *= prime;
+                }
+            }
+
+            return sum;
+        }
+
+        /// <summary>
+        /// Calculates Liouville's lambda function λ(n).
+        /// </summary>
+        /// <param name="number">The positive integer to evaluate.</param>
+        /// <returns><c>1</c> when Ω(n) is even; otherwise <c>-1</c>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="number"/> is less than 1.</exception>
+        public static int Liouville(int number)
+        {
+            if (number < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(number), "Number must be a positive integer.");
+            }
+
+            return Omega(number) % 2 == 0 ? 1 : -1;
         }
 
         private static bool IsPrime(int number)
@@ -236,61 +318,25 @@ namespace ActuarialCalculators
                 return false;
             }
 
-            for (int i = 2; i * i <= number; i++)
+            if (number == 2)
             {
-                if (number % i == 0)
+                return true;
+            }
+
+            if (number % 2 == 0)
+            {
+                return false;
+            }
+
+            for (var factor = 3; factor * factor <= number; factor += 2)
+            {
+                if (number % factor == 0)
                 {
                     return false;
                 }
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="number"></param>
-        /// <returns></returns>
-        public static double ChebyshevPsi(int number)
-        {
-            if (number < 2)
-            {
-                return 0;
-            }
-
-            double sum = 0;
-            for (int i = 2; i <= number; i++)
-            {
-                if (IsPrime(i))
-                {
-                    int power = i;
-                    while (power <= number)
-                    {
-                        sum += Math.Log(i);
-                        power *= i;
-                    }
-                }
-            }
-
-            return sum;
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="number"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentException"></exception>
-        public static int Liouville(int number)
-        {
-            if (number < 1)
-            {
-                throw new ArgumentException("Number must be a positive integer.");
-            }
-
-            int omega = Omega(number);
-            return (omega % 2 == 0) ? 1 : -1;
         }
     }
 }
