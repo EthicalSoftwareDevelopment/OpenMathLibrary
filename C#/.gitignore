@@ -1,14 +1,7 @@
-﻿# Ignore bin and obj folders
+﻿# .NET build artifacts
 **/bin/
 **/obj/
+**/TestResults/
 
-# Explicitly ignore obj directories in test projects
-TheOpenMathLibrary.ActuarialCalculators.Tests/obj/
-TheOpenMathLibrary.Engineering.Tests/obj/
-TheOpenMathLibrary.GeneralMathematics.Tests/obj/
-
-# Ignore specific files in obj directory of ActuarialCalculators.Tests
-TheOpenMathLibrary.ActuarialCalculators.Tests/obj/Debug/net8.0/TheOpenMathLibrary.ActuarialCalculators.Tests.csproj.FileListAbsolute.txt
-TheOpenMathLibrary.ActuarialCalculators.Tests/obj/TheOpenMathLibrary.ActuarialCalculators.Tests.csproj.nuget.dgspec.json
-TheOpenMathLibrary.ActuarialCalculators.Tests/obj/TheOpenMathLibrary.ActuarialCalculators.Tests.csproj.nuget.g.props
-TheOpenMathLibrary.ActuarialCalculators.Tests/obj/TheOpenMathLibrary.ActuarialCalculators.Tests.csproj.nuget.g.targets
+# JetBrains IDE metadata
+.idea/
