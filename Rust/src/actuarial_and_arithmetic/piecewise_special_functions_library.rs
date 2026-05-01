@@ -132,6 +132,53 @@ mod tests {
     }
 
     #[test]
+    fn tolerance_sensitive_piecewise_functions_handle_boundaries() {
+        let inside_tolerance = 5e-13;
+        let outside_tolerance = 2e-12;
+
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::indicator_function(inside_tolerance),
+            1.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::indicator_function(outside_tolerance),
+            0.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::sign_function(inside_tolerance),
+            0.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::sign_function(outside_tolerance),
+            1.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::sign_function(-outside_tolerance),
+            -1.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::step_function(-inside_tolerance),
+            0.5
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::heaviside_step_function(0.0),
+            1.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::rectangular_function(-0.5),
+            0.5
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::rectangular_function(0.5),
+            0.5
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::rectangular_function(0.5 + outside_tolerance),
+            0.0
+        );
+    }
+
+    #[test]
     fn periodic_waves_are_shaped_correctly() {
         assert!((PiecewiseSpecialFunctionsLibrary::sawtooth_function(1.75) - 0.75).abs() < 1e-12);
         assert!(
@@ -148,8 +195,65 @@ mod tests {
     }
 
     #[test]
+    fn periodic_waveforms_preserve_boundary_values_and_periodicity() {
+        let sawtooth = PiecewiseSpecialFunctionsLibrary::sawtooth_function(0.125);
+        let translated_sawtooth = PiecewiseSpecialFunctionsLibrary::sawtooth_function(1.125);
+        let triangle = PiecewiseSpecialFunctionsLibrary::triangle_wave_function(0.25);
+        let translated_triangle = PiecewiseSpecialFunctionsLibrary::triangle_wave_function(1.25);
+
+        assert!((sawtooth - translated_sawtooth).abs() < 1e-12);
+        assert!(
+            (PiecewiseSpecialFunctionsLibrary::triangle_wave_function(0.0) + 1.0).abs() < 1e-12
+        );
+        assert!(
+            (PiecewiseSpecialFunctionsLibrary::triangle_wave_function(0.5) - 1.0).abs() < 1e-12
+        );
+        assert!((triangle - translated_triangle).abs() < 1e-12);
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::square_wave_function(0.0),
+            0.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::square_wave_function(0.5),
+            0.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::square_wave_function(1.25),
+            1.0
+        );
+        assert_eq!(
+            PiecewiseSpecialFunctionsLibrary::square_wave_function(-0.25),
+            -1.0
+        );
+    }
+
+    #[test]
     fn special_functions_handle_removable_singularities() {
         assert!((PiecewiseSpecialFunctionsLibrary::sinc_function(0.0) - 1.0).abs() < 1e-12);
         assert!((PiecewiseSpecialFunctionsLibrary::dirichlet_kernel(0.0, 3) - 7.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn special_functions_preserve_even_symmetry() {
+        let sample = 0.75;
+        let dirichlet_input = std::f64::consts::FRAC_PI_3;
+        let positive_kernel =
+            PiecewiseSpecialFunctionsLibrary::dirichlet_kernel(dirichlet_input, 2);
+        let negative_kernel =
+            PiecewiseSpecialFunctionsLibrary::dirichlet_kernel(-dirichlet_input, 2);
+
+        assert!(
+            (PiecewiseSpecialFunctionsLibrary::sinc_function(sample)
+                - PiecewiseSpecialFunctionsLibrary::sinc_function(-sample))
+            .abs()
+                < 1e-12
+        );
+        assert!((positive_kernel - negative_kernel).abs() < 1e-12);
+        assert!(
+            (PiecewiseSpecialFunctionsLibrary::dirichlet_kernel(2.0 * std::f64::consts::PI, 3)
+                - 7.0)
+                .abs()
+                < 1e-12
+        );
     }
 }

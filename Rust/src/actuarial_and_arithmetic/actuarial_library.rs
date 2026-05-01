@@ -131,4 +131,33 @@ mod tests {
         assert!(annuity_due > annuity_immediate);
         assert!(npv > 20.0 && npv < 25.0);
     }
+
+    #[test]
+    fn annuity_edge_cases_use_expected_closed_forms() {
+        let zero_periods = ActuarialLibrary::annuity_immediate(250.0, 0.07, 0).unwrap();
+        let zero_rate_immediate = ActuarialLibrary::annuity_immediate(250.0, 0.0, 4).unwrap();
+        let zero_rate_due = ActuarialLibrary::annuity_due(250.0, 0.0, 4).unwrap();
+
+        assert_eq!(zero_periods, 0.0);
+        assert_eq!(zero_rate_immediate, 1_000.0);
+        assert_eq!(zero_rate_due, 1_000.0);
+    }
+
+    #[test]
+    fn effective_discount_and_perpetuity_match_known_values() {
+        let discount_rate = ActuarialLibrary::effective_discount_rate(0.25).unwrap();
+        let perpetuity = ActuarialLibrary::perpetuity(120.0, 0.06).unwrap();
+
+        assert!((discount_rate - 0.2).abs() < 1e-12);
+        assert!((perpetuity - 2_000.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn invalid_rates_and_perpetuity_inputs_are_rejected() {
+        assert!(ActuarialLibrary::accumulation_factor(-1.0, 1).is_err());
+        assert!(ActuarialLibrary::discount_factor(f64::NAN, 1).is_err());
+        assert!(ActuarialLibrary::net_present_value(f64::INFINITY, &[100.0]).is_err());
+        assert!(ActuarialLibrary::perpetuity(100.0, 0.0).is_err());
+        assert!(ActuarialLibrary::perpetuity(100.0, -0.01).is_err());
+    }
 }

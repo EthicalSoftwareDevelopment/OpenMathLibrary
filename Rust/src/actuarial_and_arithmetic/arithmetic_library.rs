@@ -313,11 +313,47 @@ mod tests {
     }
 
     #[test]
+    fn arithmetic_utilities_cover_boundary_cases_and_identities() {
+        let value_a = -84;
+        let value_b = 30;
+        let gcd = ArithmeticLibrary::gcd(value_a, value_b);
+        let lcm = ArithmeticLibrary::lcm(value_a, value_b);
+
+        assert_eq!(gcd, 6);
+        assert_eq!(ArithmeticLibrary::gcd(0, value_b), value_b.abs());
+        assert_eq!(ArithmeticLibrary::lcm(0, value_b), 0);
+        assert_eq!(lcm, 420);
+        assert_eq!(gcd * lcm, (value_a * value_b).abs());
+        assert_eq!(ArithmeticLibrary::factorial(0).unwrap(), 1);
+        assert_eq!(ArithmeticLibrary::binomial_coefficient(12, 0).unwrap(), 1);
+        assert_eq!(
+            ArithmeticLibrary::binomial_coefficient(12, 5).unwrap(),
+            ArithmeticLibrary::binomial_coefficient(12, 7).unwrap()
+        );
+        assert!(ArithmeticLibrary::binomial_coefficient(5, 6).is_err());
+    }
+
+    #[test]
     fn divisor_and_partition_functions_are_consistent() {
         assert_eq!(ArithmeticLibrary::sigma(12).unwrap(), 28);
         assert_eq!(ArithmeticLibrary::divisor_count(12).unwrap(), 6);
         assert_eq!(ArithmeticLibrary::aliquot_sum(12).unwrap(), 16);
         assert_eq!(ArithmeticLibrary::partition(5).unwrap(), 7);
+    }
+
+    #[test]
+    fn divisor_functions_handle_unity_and_invalid_inputs() {
+        assert_eq!(
+            ArithmeticLibrary::prime_factorization(-12),
+            vec![(2, 2), (3, 1)]
+        );
+        assert_eq!(ArithmeticLibrary::sigma(1).unwrap(), 1);
+        assert_eq!(ArithmeticLibrary::divisor_count(1).unwrap(), 1);
+        assert_eq!(ArithmeticLibrary::aliquot_sum(1).unwrap(), 0);
+        assert_eq!(ArithmeticLibrary::totient(1).unwrap(), 1);
+        assert_eq!(ArithmeticLibrary::partition(0).unwrap(), 1);
+        assert!(ArithmeticLibrary::sigma(0).is_err());
+        assert!(ArithmeticLibrary::totient(-5).is_err());
     }
 
     #[test]
@@ -329,6 +365,18 @@ mod tests {
         assert_eq!(ArithmeticLibrary::mobius(30), -1);
         assert_eq!(ArithmeticLibrary::mobius(12), 0);
         assert_eq!(ArithmeticLibrary::liouville(12).unwrap(), -1);
+    }
+
+    #[test]
+    fn number_theory_functions_cover_edge_cases() {
+        assert_eq!(ArithmeticLibrary::prime_counting(1), 0);
+        assert_eq!(ArithmeticLibrary::mobius(1), 1);
+        assert_eq!(ArithmeticLibrary::omega(1), 0);
+        assert_eq!(ArithmeticLibrary::big_omega(1), 0);
+        assert_eq!(ArithmeticLibrary::liouville(1).unwrap(), 1);
+        assert!(!ArithmeticLibrary::is_prime(-7));
+        assert!(ArithmeticLibrary::factorial(35).is_err());
+        assert!(ArithmeticLibrary::liouville(0).is_err());
     }
 
     #[test]

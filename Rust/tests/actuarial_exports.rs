@@ -21,3 +21,18 @@ fn actuarial_and_root_finding_error_paths_are_reported() {
     assert!(ArithmeticLibrary::factorial(35).is_err());
     assert!(BisectionLibrary::bisection(1.0, 2.0, 1e-12, 0, |x| x).is_err());
 }
+
+#[test]
+fn actuarial_arithmetic_and_special_function_exports_cover_boundary_cases() {
+    let annuity = ActuarialLibrary::annuity_immediate(50.0, 0.0, 4).unwrap();
+    let perpetuity = ActuarialLibrary::perpetuity(50.0, 0.1).unwrap();
+    let lcm = ArithmeticLibrary::lcm(-21, 6);
+    let totient = ArithmeticLibrary::totient(10).unwrap();
+    let dirichlet = PiecewiseSpecialFunctionsLibrary::dirichlet_kernel(0.0, 2);
+
+    assert_eq!(annuity, 200.0);
+    assert_eq!(perpetuity, 500.0);
+    assert_eq!(lcm, 42);
+    assert_eq!(totient, 4);
+    assert_eq!(dirichlet, 5.0);
+}

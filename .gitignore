@@ -3,3 +3,4 @@ C#/TheOpenMathLibrary.ActuarialCalculators/obj
 C#/TheOpenMathLibrary.Engineering/obj
 C#/TheOpenMathLibrary.GeneralMathematics/obj
 /Rust/target/
+/Rust/Cargo.lock

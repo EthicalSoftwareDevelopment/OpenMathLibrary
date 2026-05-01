@@ -191,4 +191,23 @@ mod tests {
         let root = BisectionLibrary::secant(1.0, 2.0, 1e-12, 25, |x| x * x - 2.0).unwrap();
         assert!((root - 2.0_f64.sqrt()).abs() < 1e-9);
     }
+
+    #[test]
+    fn bisection_accepts_endpoint_roots_and_alias_matches() {
+        let endpoint_root = BisectionLibrary::bisection(2.0, 4.0, 1e-12, 10, |x| x - 2.0).unwrap();
+        let alias_root = BisectionLibrary::binomial(1.0, 2.0, 1e-12, 100, |x| x * x - 2.0).unwrap();
+
+        assert!((endpoint_root - 2.0).abs() < 1e-12);
+        assert!((alias_root - 2.0_f64.sqrt()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn root_finders_reject_invalid_inputs() {
+        assert!(BisectionLibrary::bisection(1.0, 2.0, 0.0, 10, |x| x).is_err());
+        assert!(BisectionLibrary::bisection(1.0, 2.0, 1e-12, 10, |x| x * x + 1.0).is_err());
+        assert!(BisectionLibrary::newton_raphson(0.0, 1e-12, 10, |x| x * x, |_| 0.0).is_err());
+        assert!(BisectionLibrary::newton_raphson(f64::NAN, 1e-12, 10, |x| x, |_| 1.0).is_err());
+        assert!(BisectionLibrary::secant(1.0, 2.0, 1e-12, 10, |_| 5.0).is_err());
+        assert!(BisectionLibrary::secant(f64::INFINITY, 1.0, 1e-12, 10, |x| x).is_err());
+    }
 }
