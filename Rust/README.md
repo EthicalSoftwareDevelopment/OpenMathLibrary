@@ -42,6 +42,8 @@ Rust/
 │   │   ├── fluid_dynamics.rs
 │   │   ├── general_energy_definitions.rs
 │   │   └── mod.rs
+│   ├── bin/
+│   │   └── toroid_vulkan_demo.rs
 │   └── lib.rs
 └── tests/
 ```
@@ -71,6 +73,17 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 cargo doc --no-deps
+```
+
+## Vulkan Toroid Demo
+
+Phase 3 adds an optional demo binary that renders a static toroid with `vulkano`.
+
+On Windows, make sure Rust can find the MSVC toolchain and Vulkan runtime before building the
+demo.
+
+```powershell
+cargo run --features vulkan-demo --bin toroid_vulkan_demo
 ```
 
 ## Coding Standards
