@@ -8,9 +8,11 @@ use vulkano::command_buffer::{
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::physical::PhysicalDeviceType;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo};
-use vulkano::image::{view::ImageView, SwapchainImage};
+use vulkano::format::Format;
+use vulkano::image::{view::ImageView, AttachmentImage, SwapchainImage};
 use vulkano::impl_vertex;
 use vulkano::instance::{Instance, InstanceCreateInfo};
+use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::rasterization::{CullMode, FrontFace, RasterizationState};
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
@@ -46,6 +48,29 @@ struct ToroidMesh {
     indices: Vec<u32>,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CameraConfig {
+    distance: f32,
+    x_rotation: f32,
+    y_rotation: f32,
+    vertical_fov_radians: f32,
+    near_plane: f32,
+    far_plane: f32,
+}
+
+impl Default for CameraConfig {
+    fn default() -> Self {
+        Self {
+            distance: 3.8,
+            x_rotation: 0.6,
+            y_rotation: 0.9,
+            vertical_fov_radians: PI / 3.0,
+            near_plane: 0.1,
+            far_plane: 100.0,
+        }
+    }
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("Failed to launch toroid Vulkan demo: {error}");
@@ -71,9 +96,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (device, queue) = create_device(surface.clone())?;
     let (mut swapchain, images) = create_swapchain(device.clone(), surface.clone(), queue.clone())?;
 
-    let render_pass = create_render_pass(device.clone(), swapchain.image_format())?;
+    let depth_format = Format::D16_UNORM;
+    let render_pass = create_render_pass(device.clone(), swapchain.image_format(), depth_format)?;
     let (mut framebuffers, mut viewport) =
-        window_size_dependent_setup(&images, render_pass.clone());
+        window_size_dependent_setup(device.clone(), &images, render_pass.clone(), depth_format)?;
 
     let mesh = generate_toroid_mesh(1.4, 0.45, 96, 48)?;
     let vertex_buffer = CpuAccessibleBuffer::from_iter(
@@ -94,6 +120,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let pipeline = create_pipeline(device.clone(), render_pass.clone(), vs, fs)?;
     let uniform_buffer =
         CpuBufferPool::<vs::ty::Data>::new(device.clone(), BufferUsage::uniform_buffer());
+    let camera = CameraConfig::default();
 
     let mut recreate_swapchain = false;
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -114,6 +141,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } => {
                 recreate_swapchain = true;
             }
+            Event::WindowEvent {
+                event: WindowEvent::ScaleFactorChanged { .. },
+                ..
+            } => {
+                recreate_swapchain = true;
+            }
             Event::RedrawEventsCleared => {
                 let Some(future) = previous_frame_end.as_mut() else {
                     return;
@@ -121,24 +154,34 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 future.cleanup_finished();
 
                 if recreate_swapchain {
-                    let window = surface
-                        .object()
-                        .and_then(|object| object.downcast_ref::<Window>())
-                        .expect("surface should expose a winit window");
-                    let dimensions = window.inner_size();
-
-                    if dimensions.width == 0 || dimensions.height == 0 {
+                    let Some(image_extent) = current_window_extent(&surface) else {
                         return;
-                    }
+                    };
 
                     match swapchain.recreate(SwapchainCreateInfo {
-                        image_extent: dimensions.into(),
+                        image_extent,
                         ..swapchain.create_info()
                     }) {
                         Ok((new_swapchain, new_images)) => {
                             swapchain = new_swapchain;
-                            (framebuffers, viewport) =
-                                window_size_dependent_setup(&new_images, render_pass.clone());
+                            match window_size_dependent_setup(
+                                device.clone(),
+                                &new_images,
+                                render_pass.clone(),
+                                depth_format,
+                            ) {
+                                Ok((new_framebuffers, new_viewport)) => {
+                                    framebuffers = new_framebuffers;
+                                    viewport = new_viewport;
+                                }
+                                Err(error) => {
+                                    eprintln!(
+                                        "Failed to rebuild swapchain-dependent resources: {error}"
+                                    );
+                                    *control_flow = ControlFlow::Exit;
+                                    return;
+                                }
+                            }
                             recreate_swapchain = false;
                         }
                         Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
@@ -168,11 +211,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     recreate_swapchain = true;
                 }
 
-                let aspect_ratio = viewport.dimensions[0] / viewport.dimensions[1].max(1.0);
-                let model = multiply_matrices(rotation_y(0.9), rotation_x(0.6));
-                let view = translation(0.0, 0.0, -3.8);
-                let projection = perspective_projection(aspect_ratio, PI / 3.0, 0.1, 100.0);
-                let mvp = multiply_matrices(projection, multiply_matrices(view, model));
+                let mvp = static_demo_mvp(&camera, &viewport);
                 let uniform_data = vs::ty::Data { mvp };
                 let uniform_subbuffer = match uniform_buffer.from_data(uniform_data) {
                     Ok(buffer) => buffer,
@@ -217,7 +256,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 if let Err(error) = builder
                     .begin_render_pass(
                         RenderPassBeginInfo {
-                            clear_values: vec![Some([0.02, 0.02, 0.05, 1.0].into())],
+                            clear_values: vec![
+                                Some([0.02, 0.02, 0.05, 1.0].into()),
+                                Some(1_f32.into()),
+                            ],
                             ..RenderPassBeginInfo::framebuffer(
                                 framebuffers[image_index as usize].clone(),
                             )
@@ -397,7 +439,8 @@ fn create_swapchain(
 
 fn create_render_pass(
     device: Arc<Device>,
-    image_format: vulkano::format::Format,
+    image_format: Format,
+    depth_format: Format,
 ) -> Result<Arc<RenderPass>, Box<dyn std::error::Error>> {
     Ok(vulkano::single_pass_renderpass!(
         device,
@@ -407,11 +450,17 @@ fn create_render_pass(
                 store: Store,
                 format: image_format,
                 samples: 1,
+            },
+            depth: {
+                load: Clear,
+                store: DontCare,
+                format: depth_format,
+                samples: 1,
             }
         },
         pass: {
             color: [color],
-            depth_stencil: {}
+            depth_stencil: {depth}
         }
     )?)
 }
@@ -429,6 +478,7 @@ fn create_pipeline(
         .vertex_shader(vs.entry_point("main")?, ())
         .input_assembly_state(InputAssemblyState::new())
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+        .depth_stencil_state(DepthStencilState::simple_depth_test())
         .rasterization_state(
             RasterizationState::new()
                 .cull_mode(CullMode::Back)
@@ -440,9 +490,11 @@ fn create_pipeline(
 }
 
 fn window_size_dependent_setup(
+    device: Arc<Device>,
     images: &[Arc<SwapchainImage>],
     render_pass: Arc<RenderPass>,
-) -> (Vec<Arc<Framebuffer>>, Viewport) {
+    depth_format: Format,
+) -> Result<(Vec<Arc<Framebuffer>>, Viewport), Box<dyn std::error::Error>> {
     let dimensions = images[0].dimensions().width_height();
     let viewport = Viewport {
         origin: [0.0, 0.0],
@@ -453,20 +505,35 @@ fn window_size_dependent_setup(
     let framebuffers = images
         .iter()
         .map(|image| {
-            let view =
-                ImageView::new_default(image.clone()).expect("swapchain image view creation");
-            Framebuffer::new(
+            let color_view = ImageView::new_default(image.clone())?;
+            let depth_buffer =
+                AttachmentImage::transient(device.clone(), dimensions, depth_format)?;
+            let depth_view = ImageView::new_default(depth_buffer)?;
+
+            Ok(Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view],
+                    attachments: vec![color_view, depth_view],
                     ..Default::default()
                 },
-            )
-            .expect("framebuffer creation")
+            )?)
         })
-        .collect();
+        .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
 
-    (framebuffers, viewport)
+    Ok((framebuffers, viewport))
+}
+
+fn current_window_extent(surface: &Arc<Surface>) -> Option<[u32; 2]> {
+    let window = surface
+        .object()
+        .and_then(|object| object.downcast_ref::<Window>())?;
+    let dimensions = window.inner_size();
+
+    if dimensions.width == 0 || dimensions.height == 0 {
+        None
+    } else {
+        Some([dimensions.width, dimensions.height])
+    }
 }
 
 fn generate_toroid_mesh(
@@ -601,6 +668,20 @@ fn perspective_projection(aspect_ratio: f32, fov_y_radians: f32, near: f32, far:
     ]
 }
 
+fn static_demo_mvp(camera: &CameraConfig, viewport: &Viewport) -> Matrix4 {
+    let aspect_ratio = viewport.dimensions[0] / viewport.dimensions[1].max(1.0);
+    let model = multiply_matrices(rotation_y(camera.y_rotation), rotation_x(camera.x_rotation));
+    let view = translation(0.0, 0.0, -camera.distance);
+    let projection = perspective_projection(
+        aspect_ratio,
+        camera.vertical_fov_radians,
+        camera.near_plane,
+        camera.far_plane,
+    );
+
+    multiply_matrices(projection, multiply_matrices(view, model))
+}
+
 mod vs {
     vulkano_shaders::shader! {
         ty: "vertex",
@@ -646,7 +727,10 @@ mod fs {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_toroid_mesh, multiply_matrices, rotation_x, translation};
+    use super::{
+        current_window_extent, generate_toroid_mesh, multiply_matrices, rotation_x,
+        static_demo_mvp, translation, CameraConfig, Viewport,
+    };
 
     #[test]
     fn toroid_mesh_has_expected_vertex_and_index_counts() {
@@ -669,5 +753,17 @@ mod tests {
         let transform = multiply_matrices(rotation_x(0.0), translation(1.0, 2.0, 3.0));
 
         assert_eq!(transform[3], [1.0, 2.0, 3.0, 1.0]);
+    }
+
+    #[test]
+    fn static_demo_mvp_stays_finite_for_valid_viewports() {
+        let viewport = Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [1280.0, 720.0],
+            depth_range: 0.0..1.0,
+        };
+        let matrix = static_demo_mvp(&CameraConfig::default(), &viewport);
+
+        assert!(matrix.iter().flatten().all(|value| value.is_finite()));
     }
 }
