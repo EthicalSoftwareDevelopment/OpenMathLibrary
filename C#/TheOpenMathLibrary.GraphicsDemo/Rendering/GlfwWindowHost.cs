@@ -83,6 +83,16 @@ public unsafe sealed class GlfwWindowHost : IDisposable
     public float MouseDeltaY => _mouseDeltaY;
 
     /// <summary>
+    /// Gets the current cursor X position in window coordinates.
+    /// </summary>
+    public float CursorX => (float)_lastCursorX;
+
+    /// <summary>
+    /// Gets the current cursor Y position in window coordinates.
+    /// </summary>
+    public float CursorY => (float)_lastCursorY;
+
+    /// <summary>
     /// Gets the accumulated mouse wheel delta since the last poll.
     /// </summary>
     public float ScrollDeltaY => _scrollDeltaY;

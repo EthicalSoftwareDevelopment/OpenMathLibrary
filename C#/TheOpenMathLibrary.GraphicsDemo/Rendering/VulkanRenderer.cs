@@ -27,6 +27,11 @@ public unsafe sealed class VulkanRenderer : IDisposable
     private CommandPool _commandPool;
     private Device _device;
     private DeviceMemory _depthImageMemory;
+    private Pipeline _hudGraphicsPipeline;
+    private PipelineLayout _hudPipelineLayout;
+    private Buffer _hudVertexBuffer;
+    private DeviceMemory _hudVertexBufferMemory;
+    private uint _hudVertexCount;
     private DeviceMemory _indexBufferMemory;
     private DeviceMemory _vertexBufferMemory;
     private Extent2D _swapchainExtent;
@@ -128,6 +133,8 @@ public unsafe sealed class VulkanRenderer : IDisposable
                 return;
             }
         }
+
+        UpdateHudResources(renderOptions.ShaderSliderValue);
 
         Check(_vk.WaitForFences(_device, 1, in _inFlightFence, true, ulong.MaxValue), "wait for the in-flight fence");
         Check(_vk.ResetFences(_device, 1, in _inFlightFence), "reset the in-flight fence");
@@ -554,6 +561,7 @@ public unsafe sealed class VulkanRenderer : IDisposable
         CreateDepthResources();
         CreateRenderPass();
         CreateGraphicsPipelines();
+        CreateHudResources();
         CreateFramebuffers();
         AllocateCommandBuffers();
     }
@@ -592,11 +600,37 @@ public unsafe sealed class VulkanRenderer : IDisposable
             _wireframeGraphicsPipeline = default;
         }
 
+        if (_hudGraphicsPipeline.Handle != 0)
+        {
+            _vk.DestroyPipeline(_device, _hudGraphicsPipeline, null);
+            _hudGraphicsPipeline = default;
+        }
+
         if (_pipelineLayout.Handle != 0)
         {
             _vk.DestroyPipelineLayout(_device, _pipelineLayout, null);
             _pipelineLayout = default;
         }
+
+        if (_hudPipelineLayout.Handle != 0)
+        {
+            _vk.DestroyPipelineLayout(_device, _hudPipelineLayout, null);
+            _hudPipelineLayout = default;
+        }
+
+        if (_hudVertexBuffer.Handle != 0)
+        {
+            _vk.DestroyBuffer(_device, _hudVertexBuffer, null);
+            _hudVertexBuffer = default;
+        }
+
+        if (_hudVertexBufferMemory.Handle != 0)
+        {
+            _vk.FreeMemory(_device, _hudVertexBufferMemory, null);
+            _hudVertexBufferMemory = default;
+        }
+
+        _hudVertexCount = 0;
 
         if (_renderPass.Handle != 0)
         {
@@ -795,9 +829,13 @@ public unsafe sealed class VulkanRenderer : IDisposable
     {
         byte[] vertexShaderBytes = CompileShader(ShaderSources.VertexShader, ShaderKind.VertexShader, "Toroid.vert");
         byte[] fragmentShaderBytes = CompileShader(ShaderSources.FragmentShader, ShaderKind.FragmentShader, "Toroid.frag");
+        byte[] hudVertexShaderBytes = CompileShader(ShaderSources.HudVertexShader, ShaderKind.VertexShader, "Hud.vert");
+        byte[] hudFragmentShaderBytes = CompileShader(ShaderSources.HudFragmentShader, ShaderKind.FragmentShader, "Hud.frag");
 
         ShaderModule vertexShaderModule = CreateShaderModule(vertexShaderBytes);
         ShaderModule fragmentShaderModule = CreateShaderModule(fragmentShaderBytes);
+        ShaderModule hudVertexShaderModule = CreateShaderModule(hudVertexShaderBytes);
+        ShaderModule hudFragmentShaderModule = CreateShaderModule(hudFragmentShaderBytes);
         byte* entryPointPtr = (byte*)SilkMarshal.StringToPtr("main");
 
         try
@@ -934,6 +972,8 @@ public unsafe sealed class VulkanRenderer : IDisposable
                         colorBlendState,
                         PolygonMode.Line);
                 }
+
+                CreateHudGraphicsPipeline(hudVertexShaderModule, hudFragmentShaderModule, entryPointPtr);
             }
         }
         finally
@@ -941,7 +981,187 @@ public unsafe sealed class VulkanRenderer : IDisposable
             SilkMarshal.Free((nint)entryPointPtr);
             _vk.DestroyShaderModule(_device, vertexShaderModule, null);
             _vk.DestroyShaderModule(_device, fragmentShaderModule, null);
+            _vk.DestroyShaderModule(_device, hudVertexShaderModule, null);
+            _vk.DestroyShaderModule(_device, hudFragmentShaderModule, null);
         }
+    }
+
+    private void CreateHudGraphicsPipeline(ShaderModule vertexShaderModule, ShaderModule fragmentShaderModule, byte* entryPointPtr)
+    {
+        PipelineShaderStageCreateInfo* shaderStages = stackalloc PipelineShaderStageCreateInfo[2];
+        shaderStages[0] = new PipelineShaderStageCreateInfo
+        {
+            SType = StructureType.PipelineShaderStageCreateInfo,
+            Stage = ShaderStageFlags.VertexBit,
+            Module = vertexShaderModule,
+            PName = entryPointPtr,
+        };
+
+        shaderStages[1] = new PipelineShaderStageCreateInfo
+        {
+            SType = StructureType.PipelineShaderStageCreateInfo,
+            Stage = ShaderStageFlags.FragmentBit,
+            Module = fragmentShaderModule,
+            PName = entryPointPtr,
+        };
+
+        VertexInputBindingDescription bindingDescription = HudVertex.GetBindingDescription();
+        VertexInputAttributeDescription[] attributeDescriptions = HudVertex.GetAttributeDescriptions();
+
+        fixed (VertexInputAttributeDescription* attributeDescriptionsPtr = attributeDescriptions)
+        {
+            PipelineVertexInputStateCreateInfo vertexInputState = new()
+            {
+                SType = StructureType.PipelineVertexInputStateCreateInfo,
+                VertexBindingDescriptionCount = 1,
+                PVertexBindingDescriptions = &bindingDescription,
+                VertexAttributeDescriptionCount = (uint)attributeDescriptions.Length,
+                PVertexAttributeDescriptions = attributeDescriptionsPtr,
+            };
+
+            PipelineInputAssemblyStateCreateInfo inputAssemblyState = new()
+            {
+                SType = StructureType.PipelineInputAssemblyStateCreateInfo,
+                Topology = PrimitiveTopology.TriangleList,
+                PrimitiveRestartEnable = false,
+            };
+
+            Viewport viewport = new()
+            {
+                X = 0f,
+                Y = 0f,
+                Width = _swapchainExtent.Width,
+                Height = _swapchainExtent.Height,
+                MinDepth = 0f,
+                MaxDepth = 1f,
+            };
+
+            Rect2D scissor = new()
+            {
+                Offset = new Offset2D(0, 0),
+                Extent = _swapchainExtent,
+            };
+
+            PipelineViewportStateCreateInfo viewportState = new()
+            {
+                SType = StructureType.PipelineViewportStateCreateInfo,
+                ViewportCount = 1,
+                PViewports = &viewport,
+                ScissorCount = 1,
+                PScissors = &scissor,
+            };
+
+            PipelineRasterizationStateCreateInfo rasterizationState = new()
+            {
+                SType = StructureType.PipelineRasterizationStateCreateInfo,
+                DepthClampEnable = false,
+                RasterizerDiscardEnable = false,
+                PolygonMode = PolygonMode.Fill,
+                LineWidth = 1f,
+                CullMode = CullModeFlags.None,
+                FrontFace = FrontFace.CounterClockwise,
+                DepthBiasEnable = false,
+            };
+
+            PipelineMultisampleStateCreateInfo multisampleState = new()
+            {
+                SType = StructureType.PipelineMultisampleStateCreateInfo,
+                RasterizationSamples = SampleCountFlags.Count1Bit,
+                SampleShadingEnable = false,
+            };
+
+            PipelineDepthStencilStateCreateInfo depthStencilState = new()
+            {
+                SType = StructureType.PipelineDepthStencilStateCreateInfo,
+                DepthTestEnable = false,
+                DepthWriteEnable = false,
+                DepthCompareOp = CompareOp.Always,
+                DepthBoundsTestEnable = false,
+                StencilTestEnable = false,
+            };
+
+            PipelineColorBlendAttachmentState colorBlendAttachment = new()
+            {
+                ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit,
+                BlendEnable = false,
+            };
+
+            PipelineColorBlendStateCreateInfo colorBlendState = new()
+            {
+                SType = StructureType.PipelineColorBlendStateCreateInfo,
+                LogicOpEnable = false,
+                AttachmentCount = 1,
+                PAttachments = &colorBlendAttachment,
+            };
+
+            PipelineLayoutCreateInfo pipelineLayoutCreateInfo = new()
+            {
+                SType = StructureType.PipelineLayoutCreateInfo,
+            };
+
+            Check(_vk.CreatePipelineLayout(_device, in pipelineLayoutCreateInfo, null, out _hudPipelineLayout), "create the HUD pipeline layout");
+
+            GraphicsPipelineCreateInfo createInfo = new()
+            {
+                SType = StructureType.GraphicsPipelineCreateInfo,
+                StageCount = 2,
+                PStages = shaderStages,
+                PVertexInputState = &vertexInputState,
+                PInputAssemblyState = &inputAssemblyState,
+                PViewportState = &viewportState,
+                PRasterizationState = &rasterizationState,
+                PMultisampleState = &multisampleState,
+                PDepthStencilState = &depthStencilState,
+                PColorBlendState = &colorBlendState,
+                Layout = _hudPipelineLayout,
+                RenderPass = _renderPass,
+                Subpass = 0,
+            };
+
+            Check(_vk.CreateGraphicsPipelines(_device, default, 1, in createInfo, null, out _hudGraphicsPipeline), "create the HUD graphics pipeline");
+        }
+    }
+
+    private void CreateHudResources()
+    {
+        UpdateHudResources(0.5f);
+    }
+
+    private void UpdateHudResources(float sliderValue)
+    {
+        HudVertex[] vertices = BuildHudVertices(sliderValue);
+        if (vertices.Length == 0)
+        {
+            _hudVertexCount = 0;
+            return;
+        }
+
+        ulong bufferSize = (ulong)(HudVertex.SizeInBytes * vertices.Length);
+        if (_hudVertexBuffer.Handle == 0 || _hudVertexCount != (uint)vertices.Length)
+        {
+            if (_hudVertexBuffer.Handle != 0)
+            {
+                _vk.DestroyBuffer(_device, _hudVertexBuffer, null);
+                _vk.FreeMemory(_device, _hudVertexBufferMemory, null);
+            }
+
+            CreateBuffer(bufferSize, BufferUsageFlags.VertexBufferBit, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit, out _hudVertexBuffer, out _hudVertexBufferMemory);
+        }
+
+        _hudVertexCount = (uint)vertices.Length;
+        CopyToDeviceMemory(_hudVertexBufferMemory, bufferSize, vertices);
+    }
+
+    private HudVertex[] BuildHudVertices(float sliderValue)
+    {
+        string[] lines =
+        [
+            "F1 WIRE  R ROTATE  P SNAP",
+            "LMB ORBIT  RMB DRAG  WHEEL ZOOM",
+            "W S KEYS ZOOM  ESC QUIT",
+        ];
+
+        return HudTextBuilder.Build(lines, _swapchainExtent.Width, _swapchainExtent.Height, sliderValue);
     }
 
     private void CreateFramebuffers()
@@ -1090,6 +1310,16 @@ public unsafe sealed class VulkanRenderer : IDisposable
         _vk.CmdPushConstants(commandBuffer, _pipelineLayout, ShaderStageFlags.VertexBit, 0, ScenePushConstants.SizeInBytes, &pushConstants);
 
         _vk.CmdDrawIndexed(commandBuffer, _indexCount, 1, 0, 0, 0);
+
+        if (_hudVertexCount > 0)
+        {
+            Buffer hudVertexBuffer = _hudVertexBuffer;
+            ulong hudOffset = 0;
+            _vk.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, _hudGraphicsPipeline);
+            _vk.CmdBindVertexBuffers(commandBuffer, 0, 1, in hudVertexBuffer, in hudOffset);
+            _vk.CmdDraw(commandBuffer, _hudVertexCount, 1, 0, 0);
+        }
+
         _vk.CmdEndRenderPass(commandBuffer);
 
         Check(_vk.EndCommandBuffer(commandBuffer), "finish recording the command buffer");

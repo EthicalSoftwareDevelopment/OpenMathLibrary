@@ -11,7 +11,9 @@ namespace TheOpenMathLibrary.GraphicsDemo;
 public sealed class GraphicsDemoApp
 {
     private const string BaseTitle = "TheOpenMathLibrary.GraphicsDemo - Vulkan Toroid";
+    private static readonly TimeSpan TargetFrameDuration = TimeSpan.FromSeconds(1d / 60d);
     private readonly GlfwWindowHost _windowHost = new(1280, 720, "TheOpenMathLibrary.GraphicsDemo - Vulkan Toroid");
+    private readonly VerticalSlider _shaderSlider = new(0.5f);
     private readonly InputEdge _autoRotateToggle = new();
     private readonly InputEdge _screenshotToggle = new();
     private readonly InputEdge _wireframeToggle = new();
@@ -63,9 +65,12 @@ public sealed class GraphicsDemoApp
                     toroidRotation += deltaSeconds * 0.8f;
                 }
 
+                bool primaryMouseDown = _windowHost.IsMouseButtonDown(MouseButton.Left);
+                _shaderSlider.Update(primaryMouseDown, _windowHost.CursorX, _windowHost.CursorY, _windowHost.FramebufferWidth, _windowHost.FramebufferHeight);
+
                 _windowHost.SetTitle(BuildWindowTitle(renderer.SupportsWireframe, wireframe, autoRotate));
 
-                camera.Update(GetCameraInput(), deltaSeconds);
+                camera.Update(GetCameraInput(_shaderSlider.IsDragging), deltaSeconds);
 
                 if (!_windowHost.HasUsableFramebuffer)
                 {
@@ -78,7 +83,7 @@ public sealed class GraphicsDemoApp
 
                 Matrix4x4 viewProjectionMatrix = camera.CreateViewProjectionMatrix(width / (float)height);
                 Matrix4x4 modelMatrix = Matrix4x4.CreateRotationX(0.7f) * Matrix4x4.CreateRotationY(toroidRotation);
-                DemoRenderOptions renderOptions = new(viewProjectionMatrix, modelMatrix, wireframe);
+                DemoRenderOptions renderOptions = new(viewProjectionMatrix, modelMatrix, wireframe, _shaderSlider.Value);
 
                 renderer.RenderFrame(renderOptions, width, height);
 
@@ -87,13 +92,20 @@ public sealed class GraphicsDemoApp
                     string path = SceneSnapshotExporter.Export(Environment.CurrentDirectory, renderOptions, width, height);
                     Console.WriteLine($"Exported snapshot: {path}");
                 }
+
+                TimeSpan frameElapsed = stopwatch.Elapsed - current;
+                TimeSpan sleepTime = TargetFrameDuration - frameElapsed;
+                if (sleepTime > TimeSpan.Zero)
+                {
+                    Thread.Sleep(sleepTime);
+                }
             }
 
             renderer.WaitIdle();
         }
     }
 
-    private OrbitCameraInput GetCameraInput()
+    private OrbitCameraInput GetCameraInput(bool suppressMouseOrbit)
     {
         return new OrbitCameraInput(
             RotateLeft: _windowHost.IsKeyDown(Keys.Left),
@@ -102,7 +114,7 @@ public sealed class GraphicsDemoApp
             RotateDown: _windowHost.IsKeyDown(Keys.Down),
             ZoomIn: _windowHost.IsKeyDown(Keys.W) || _windowHost.IsKeyDown(Keys.Equal),
             ZoomOut: _windowHost.IsKeyDown(Keys.S) || _windowHost.IsKeyDown(Keys.Minus),
-            IsMouseOrbiting: _windowHost.IsMouseButtonDown(MouseButton.Left),
+            IsMouseOrbiting: !suppressMouseOrbit && _windowHost.IsMouseButtonDown(MouseButton.Left),
             IsMouseZooming: _windowHost.IsMouseButtonDown(MouseButton.Right),
             MouseDeltaX: _windowHost.MouseDeltaX,
             MouseDeltaY: _windowHost.MouseDeltaY,

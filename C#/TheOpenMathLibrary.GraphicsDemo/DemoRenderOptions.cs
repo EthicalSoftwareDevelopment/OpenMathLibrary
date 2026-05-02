@@ -8,5 +8,6 @@ namespace TheOpenMathLibrary.GraphicsDemo;
 public readonly record struct DemoRenderOptions(
     Matrix4x4 ViewProjectionMatrix,
     Matrix4x4 ModelMatrix,
-    bool UseWireframe);
+    bool UseWireframe,
+    float ShaderSliderValue = 0.5f);
 
