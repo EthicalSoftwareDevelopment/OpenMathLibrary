@@ -18,8 +18,14 @@
 - **Objective**: Visualize a toroid using Vulkan.
 - **Tasks**:
   - Set up Vulkan for rendering.
+    - Research Vulkan setup and initialization.
+    - Configure Vulkan instance, device, and swapchain.
   - Create a 3D model of a toroid.
+    - Design mathematical representation of a toroid.
+    - Use vertex and index buffers for 3D modeling.
   - Implement rendering pipeline.
+    - Develop shaders for rendering.
+    - Integrate pipeline stages (vertex input, rasterization, etc.).
 
 ## Phase 4. Shading Dynamics of the Toroid as if Self-Sustaining Flow
 - **Objective**: Simulate and render dynamic shading effects.
