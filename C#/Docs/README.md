@@ -1,14 +1,15 @@
 ﻿# TheOpenMathLibrary (C#)
 
-TheOpenMathLibrary is a .NET 8 solution that organizes reusable mathematical code into focused class-library projects for actuarial calculators, engineering formulas, and general mathematics.
+TheOpenMathLibrary is a .NET 8 solution that organizes reusable mathematical code into focused class-library projects for actuarial calculators, engineering formulas, general mathematics, and an experimental Vulkan toroid demo.
 
 ## Projects
 
-The solution currently contains three C# class libraries:
+The solution currently contains four primary C# projects:
 
 - `TheOpenMathLibrary.ActuarialCalculators`
 - `TheOpenMathLibrary.Engineering`
 - `TheOpenMathLibrary.GeneralMathematics`
+- `TheOpenMathLibrary.GraphicsDemo`
 
 ## Current Structure
 
@@ -59,6 +60,22 @@ Examples of functionality:
 - trigonometric functions
 - wave theory formulas
 
+### `TheOpenMathLibrary.GraphicsDemo`
+This project is a standalone, demo-only Vulkan renderer that draws a toroid using Silk.NET, GLFW, and renderer-local mesh generation.
+
+Representative files:
+- `GraphicsDemoApp.cs`
+- `OrbitCamera.cs`
+- `Geometry/ToroidMeshGenerator.cs`
+- `Rendering/VulkanRenderer.cs`
+- `Rendering/ShaderSources.cs`
+
+Examples of functionality:
+- Vulkan instance, surface, device, and swapchain setup
+- renderer-local toroid vertex, normal, and index generation
+- minimal Lambert-style shading for shape readability
+- basic orbit camera controls for inspecting the toroid
+
 ## Target Framework
 
 All current projects target:
@@ -76,13 +93,14 @@ dotnet build .\TheOpenMathLibrary.sln
 
 ## Test Projects
 
-The solution now includes dedicated MSTest projects that mirror the three production libraries:
+The solution now includes dedicated MSTest projects that mirror the three production libraries and the graphics demo:
 
 - `TheOpenMathLibrary.ActuarialCalculators.Tests`
 - `TheOpenMathLibrary.Engineering.Tests`
 - `TheOpenMathLibrary.GeneralMathematics.Tests`
+- `TheOpenMathLibrary.GraphicsDemo.Tests`
 
-These tests cover formula correctness, edge cases, regression-sensitive aliases, and invalid-input guards.
+These tests cover formula correctness, edge cases, regression-sensitive aliases, invalid-input guards, and renderer-local toroid mesh generation.
 
 ## Test
 
@@ -98,11 +116,19 @@ To run a single test project during development, use its project file directly. 
 dotnet test .\TheOpenMathLibrary.Engineering.Tests\TheOpenMathLibrary.Engineering.Tests.csproj
 ```
 
+To run the Vulkan toroid demo during development, use:
+
+```powershell
+dotnet run --project .\TheOpenMathLibrary.GraphicsDemo\TheOpenMathLibrary.GraphicsDemo.csproj
+```
+
+The demo requires a Vulkan-capable runtime and remains intentionally separate from the reusable math libraries.
+
 ## Notes
 
 The solution already has a useful foundation, but it is still in an early growth phase. Good next improvements include:
 
-- adding unit tests
+- expanding test coverage
 - improving XML documentation comments
 - standardizing namespaces across projects
 - validating formulas and edge cases
@@ -112,7 +138,7 @@ The solution already has a useful foundation, but it is still in an early growth
 
 See `ROADMAP.md` for planned next steps, including:
 
-- Rust math libraries
+- C# math libraries
 - unit tests
 - Vulkan rendering of a toroid
 - shading dynamics of the toroid as if self-sustaining flow

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TheOpenMathLibrary.ActuarialCalculators.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b46236ea39a373103c1107ce9f984fdc77298f6f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+618ad7d9e81b7fa291c0f15b30f170cfbf7ed9d4")]
 [assembly: System.Reflection.AssemblyProductAttribute("TheOpenMathLibrary.ActuarialCalculators.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TheOpenMathLibrary.ActuarialCalculators.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
