@@ -2,7 +2,7 @@
 use std::f32::consts::PI;
 use std::fmt;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -201,6 +201,8 @@ const TESLA_COIL_TURNS: usize = 7;
 const TESLA_COIL_SEGMENTS_PER_TURN: usize = 24;
 const TESLA_COIL_WIRE_HALF_WIDTH: f32 = 0.045;
 const TESLA_ARC_SEGMENTS: usize = 20;
+const TESLA_ARC_LENGTH_MULTIPLIER: f32 = 3.0;
+const TESLA_ARC_LENGTH_SEARCH_STEPS: usize = 8;
 
 #[derive(Debug)]
 struct ToroidMesh {
@@ -509,18 +511,19 @@ fn run() -> DemoResult<()> {
     )?;
     let camera = CameraConfig::default();
     let animation_start = Instant::now();
+    let frame_interval = Duration::from_millis(16);
 
     let mut recreate_swapchain = false;
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
     let mut shader_control_value = SliderValue::MIDPOINT;
     let mut slider_drag_active = false;
     let mut cursor_position = [0.0_f32, 0.0_f32];
-    let mut needs_redraw = true;
+    let mut next_frame_time = Instant::now();
 
     request_window_redraw(&surface);
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::WaitUntil(next_frame_time);
 
         match event {
             Event::WindowEvent {
@@ -534,14 +537,16 @@ fn run() -> DemoResult<()> {
                 ..
             } => {
                 recreate_swapchain = true;
-                needs_redraw = true;
+                next_frame_time = Instant::now();
+                request_window_redraw(&surface);
             }
             Event::WindowEvent {
                 event: WindowEvent::ScaleFactorChanged { .. },
                 ..
             } => {
                 recreate_swapchain = true;
-                needs_redraw = true;
+                next_frame_time = Instant::now();
+                request_window_redraw(&surface);
             }
             Event::WindowEvent {
                 event: WindowEvent::CursorMoved { position, .. },
@@ -555,7 +560,8 @@ fn run() -> DemoResult<()> {
                         let layout = build_demo_layout(&full_viewport, shader_control_value);
                         shader_control_value =
                             slider_value_from_cursor(&layout.slider_track_rect, cursor_position[1]);
-                        needs_redraw = true;
+                        next_frame_time = Instant::now();
+                        request_window_redraw(&surface);
                     }
                 }
             }
@@ -583,18 +589,22 @@ fn run() -> DemoResult<()> {
                                     &layout.slider_track_rect,
                                     cursor_position[1],
                                 );
-                                needs_redraw = true;
+                                next_frame_time = Instant::now();
+                                request_window_redraw(&surface);
                             }
                         }
                         ElementState::Released => {
                             slider_drag_active = false;
-                            needs_redraw = true;
+                            next_frame_time = Instant::now();
+                            request_window_redraw(&surface);
                         }
                     }
                 }
             }
             Event::MainEventsCleared => {
-                if needs_redraw {
+                let now = Instant::now();
+                if now >= next_frame_time {
+                    next_frame_time = now + frame_interval;
                     request_window_redraw(&surface);
                 }
             }
@@ -606,7 +616,6 @@ fn run() -> DemoResult<()> {
 
                 if recreate_swapchain {
                     let Some(image_extent) = current_window_extent(&surface) else {
-                        needs_redraw = true;
                         return;
                     };
 
@@ -635,7 +644,6 @@ fn run() -> DemoResult<()> {
                                 }
                             }
                             recreate_swapchain = false;
-                            needs_redraw = true;
                         }
                         Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
                         Err(error) => {
@@ -651,16 +659,13 @@ fn run() -> DemoResult<()> {
                         Ok(result) => result,
                         Err(AcquireError::OutOfDate) => {
                             recreate_swapchain = true;
-                            needs_redraw = true;
                             return;
                         }
                         Err(AcquireError::Timeout) => {
-                            needs_redraw = true;
                             return;
                         }
                         Err(error) => {
                             eprintln!("Failed to acquire swapchain image: {error}");
-                            needs_redraw = true;
                             return;
                         }
                     };
@@ -865,7 +870,6 @@ fn run() -> DemoResult<()> {
                     Err(error) => {
                         eprintln!("Failed to submit draw commands: {error}");
                         previous_frame_end = Some(sync::now(device.clone()).boxed());
-                        needs_redraw = true;
                         return;
                     }
                 };
@@ -873,12 +877,10 @@ fn run() -> DemoResult<()> {
                 match future {
                     Ok(future) => {
                         previous_frame_end = Some(future.boxed());
-                        needs_redraw = true;
                     }
                     Err(FlushError::OutOfDate) => {
                         recreate_swapchain = true;
                         previous_frame_end = Some(sync::now(device.clone()).boxed());
-                        needs_redraw = true;
                     }
                     Err(FlushError::Timeout)
                     | Err(FlushError::AccessError(_))
@@ -886,12 +888,10 @@ fn run() -> DemoResult<()> {
                     | Err(FlushError::ExclusiveAlreadyInUse)
                     | Err(FlushError::OneTimeSubmitAlreadySubmitted) => {
                         previous_frame_end = Some(sync::now(device.clone()).boxed());
-                        needs_redraw = true;
                     }
                     Err(error) => {
                         eprintln!("Failed to flush GPU future: {error}");
                         previous_frame_end = Some(sync::now(device.clone()).boxed());
-                        needs_redraw = true;
                     }
                 }
             }
@@ -1542,39 +1542,141 @@ fn build_tesla_arc_vertices(slider_value: SliderValue, time_seconds: f32) -> Vec
             TESLA_COIL_CENTER[2] + TESLA_COIL_RADIUS * end_angle.sin(),
         ];
 
-        let direction = normalize_vec3(sub_vec3(end, start));
+        let base_span = sub_vec3(end, start);
+        let base_distance = length_vec3(base_span).max(1e-4);
+        let direction = normalize_vec3(base_span);
         let (side, up) = perpendicular_basis(direction);
-        let amplitude = 0.09 + 0.15 * control + arc_index as f32 * 0.01;
         let ribbon_width = 0.022 + 0.010 * control;
-        let mut points = Vec::with_capacity(TESLA_ARC_SEGMENTS + 1);
-
-        for segment_index in 0..=TESLA_ARC_SEGMENTS {
-            let progress = segment_index as f32 / TESLA_ARC_SEGMENTS as f32;
-            let base_position = lerp_vec3(start, end, progress);
-            let envelope = (progress * PI).sin().max(0.0).powf(0.82);
-            let primary_wave =
-                (progress * 7.0 * PI + time_seconds * 8.2 + arc_index as f32 * 1.3).sin();
-            let secondary_wave =
-                (progress * 11.0 * PI - time_seconds * 6.4 + arc_index as f32 * 0.8).cos();
-            let displacement = add_vec3(
-                scale_vec3(side, primary_wave * amplitude * envelope),
-                scale_vec3(up, secondary_wave * amplitude * 0.42 * envelope),
-            );
-            let longitudinal = scale_vec3(
-                direction,
-                secondary_wave * (0.01 + 0.01 * control) * envelope,
-            );
-
-            points.push(add_vec3(
-                base_position,
-                add_vec3(displacement, longitudinal),
-            ));
-        }
+        let points = build_tesla_arc_points(
+            start,
+            end,
+            side,
+            up,
+            direction,
+            base_distance,
+            control,
+            time_seconds,
+            arc_index,
+        );
 
         append_arc_strip(&mut vertices, &points, ribbon_width, profile.color);
     }
 
     vertices
+}
+
+fn build_tesla_arc_points(
+    start: [f32; 3],
+    end: [f32; 3],
+    side: [f32; 3],
+    up: [f32; 3],
+    direction: [f32; 3],
+    base_distance: f32,
+    control: f32,
+    time_seconds: f32,
+    arc_index: usize,
+) -> Vec<[f32; 3]> {
+    let base_amplitude = 0.09 + 0.15 * control + arc_index as f32 * 0.01;
+    let target_length = base_distance * TESLA_ARC_LENGTH_MULTIPLIER;
+    let mut low = base_amplitude;
+    let mut high = (base_distance * (1.15 + 0.35 * control)).max(base_amplitude);
+    let mut best_points = tesla_arc_points_with_amplitude(
+        start,
+        end,
+        side,
+        up,
+        direction,
+        control,
+        time_seconds,
+        arc_index,
+        high,
+    );
+
+    while polyline_length(&best_points) < target_length && high < base_distance * 32.0 {
+        low = high;
+        high *= 1.6;
+        best_points = tesla_arc_points_with_amplitude(
+            start,
+            end,
+            side,
+            up,
+            direction,
+            control,
+            time_seconds,
+            arc_index,
+            high,
+        );
+    }
+
+    for _ in 0..TESLA_ARC_LENGTH_SEARCH_STEPS {
+        let mid = 0.5 * (low + high);
+        let candidate = tesla_arc_points_with_amplitude(
+            start,
+            end,
+            side,
+            up,
+            direction,
+            control,
+            time_seconds,
+            arc_index,
+            mid,
+        );
+
+        if polyline_length(&candidate) < target_length {
+            low = mid;
+        } else {
+            high = mid;
+            best_points = candidate;
+        }
+    }
+
+    best_points
+}
+
+fn tesla_arc_points_with_amplitude(
+    start: [f32; 3],
+    end: [f32; 3],
+    side: [f32; 3],
+    up: [f32; 3],
+    direction: [f32; 3],
+    control: f32,
+    time_seconds: f32,
+    arc_index: usize,
+    amplitude: f32,
+) -> Vec<[f32; 3]> {
+    let mut points = Vec::with_capacity(TESLA_ARC_SEGMENTS + 1);
+
+    for segment_index in 0..=TESLA_ARC_SEGMENTS {
+        let progress = segment_index as f32 / TESLA_ARC_SEGMENTS as f32;
+        let base_position = lerp_vec3(start, end, progress);
+        let envelope = (progress * PI).sin().max(0.0).powf(0.82);
+        let primary_wave =
+            (progress * 7.0 * PI + time_seconds * 8.2 + arc_index as f32 * 1.3).sin();
+        let secondary_wave =
+            (progress * 11.0 * PI - time_seconds * 6.4 + arc_index as f32 * 0.8).cos();
+        let displacement = add_vec3(
+            scale_vec3(side, primary_wave * amplitude * envelope),
+            scale_vec3(up, secondary_wave * amplitude * 0.42 * envelope),
+        );
+        let longitudinal = scale_vec3(
+            direction,
+            secondary_wave * (0.01 + 0.01 * control) * envelope,
+        );
+
+        points.push(add_vec3(
+            base_position,
+            add_vec3(displacement, longitudinal),
+        ));
+    }
+
+    points
+}
+
+fn polyline_length(points: &[[f32; 3]]) -> f32 {
+    points
+        .windows(2)
+        .map(|segment| length_vec3(sub_vec3(segment[1], segment[0])))
+        .sum()
 }
 
 fn append_arc_strip(
@@ -1822,11 +1924,16 @@ fn load_wgsl_shader(
 
 #[cfg(test)]
 mod tests {
+    use std::f32::consts::PI;
+
     use super::{
-        build_demo_layout, build_tesla_arc_vertices, build_ui_vertices, generate_coil_mesh,
-        generate_toroid_mesh, multiply_matrices, rotation_x, shader_flow_parameters,
-        slider_value_from_cursor, static_demo_mvp, tesla_arc_profile, translation,
-        viewport_from_extent, CameraConfig, SliderValue, ToroidSpec, Viewport, TESLA_ARC_SEGMENTS,
+        build_demo_layout, build_tesla_arc_points, build_tesla_arc_vertices, build_ui_vertices,
+        generate_coil_mesh, generate_toroid_mesh, length_vec3, multiply_matrices, normalize_vec3,
+        perpendicular_basis, polyline_length, rotation_x, shader_flow_parameters,
+        slider_value_from_cursor, static_demo_mvp, sub_vec3, tesla_arc_profile,
+        toroid_surface_point, translation, viewport_from_extent, CameraConfig, SliderValue,
+        ToroidSpec, Viewport, TESLA_ARC_LENGTH_MULTIPLIER, TESLA_ARC_SEGMENTS, TESLA_COIL_CENTER,
+        TESLA_COIL_HEIGHT, TESLA_COIL_RADIUS,
     };
 
     #[test]
@@ -1939,6 +2046,42 @@ mod tests {
             vertex.position.iter().all(|value| value.is_finite())
                 && vertex.color.iter().all(|value| value.is_finite())
         }));
+    }
+
+    #[test]
+    fn tesla_arc_centerline_is_about_three_times_longer_than_anchor_distance() {
+        let control = 0.55;
+        let spread = 0.5;
+        let time_seconds = 0.5;
+        let arc_index = 0;
+        let major_theta =
+            (spread - 0.5) * 0.82 + 0.05 * (time_seconds * 1.6 + arc_index as f32 * 0.9).sin();
+        let minor_theta = 0.18 * PI + 0.08 * (time_seconds * 2.1 + arc_index as f32 * 0.7).cos();
+        let start = toroid_surface_point(major_theta, minor_theta);
+        let end_angle = -0.55 + (spread - 0.5) * 1.15;
+        let end = [
+            TESLA_COIL_CENTER[0] + TESLA_COIL_RADIUS * end_angle.cos(),
+            TESLA_COIL_CENTER[1] + TESLA_COIL_HEIGHT * 0.5 - 0.08 + 0.12 * (spread - 0.5),
+            TESLA_COIL_CENTER[2] + TESLA_COIL_RADIUS * end_angle.sin(),
+        ];
+        let direction = normalize_vec3(sub_vec3(end, start));
+        let (side, up) = perpendicular_basis(direction);
+        let base_distance = length_vec3(sub_vec3(end, start));
+        let points = build_tesla_arc_points(
+            start,
+            end,
+            side,
+            up,
+            direction,
+            base_distance,
+            control,
+            time_seconds,
+            arc_index,
+        );
+        let path_length = polyline_length(&points);
+
+        assert!(path_length >= base_distance * (TESLA_ARC_LENGTH_MULTIPLIER * 0.95));
+        assert!(path_length <= base_distance * (TESLA_ARC_LENGTH_MULTIPLIER * 1.25));
     }
 
     #[test]
