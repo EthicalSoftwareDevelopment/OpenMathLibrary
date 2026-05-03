@@ -68,6 +68,7 @@ type FramebufferBundle = (Vec<Arc<Framebuffer>>, Viewport);
 const SCENE_VERTEX_SHADER_WGSL: &str = r#"
 struct SceneUniforms {
     mvp: mat4x4<f32>,
+    shading: vec4<f32>,
 };
 
 struct VertexInput {
@@ -88,10 +89,19 @@ var<uniform> uniforms: SceneUniforms;
 fn main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     let light_direction = normalize(vec3<f32>(0.4, 1.0, 0.7));
-    let diffuse = max(dot(normalize(input.normal), light_direction), 0.2);
+    let flow_strength = uniforms.shading.x;
+    let ambient_floor = uniforms.shading.y;
+    let contrast = uniforms.shading.z;
+    let phase = uniforms.shading.w;
+    let flow_wave = 0.5 + 0.5 * sin(dot(input.position, vec3<f32>(2.1, 3.7, 1.9)) + phase * 6.2831853);
+    let dynamic_light = normalize(vec3<f32>(0.35 + 0.45 * contrast, 1.0, 0.75 - 0.3 * contrast));
+    let diffuse = max(dot(normalize(input.normal), dynamic_light), 0.0);
+    let lit = ambient_floor + (1.0 - ambient_floor) * diffuse;
+    let flowing_lit = lit * (0.82 + 0.18 * flow_wave);
+    let final_lit = lit + flow_strength * (flowing_lit - lit);
 
     output.position = uniforms.mvp * vec4<f32>(input.position, 1.0);
-    output.vertex_color = input.color * diffuse;
+    output.vertex_color = input.color * final_lit;
     return output;
 }
 "#;
@@ -147,6 +157,7 @@ struct ToroidMesh {
 #[repr(C)]
 struct SceneUniformData {
     mvp: Matrix4,
+    shading: [f32; 4],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -535,6 +546,7 @@ fn run() -> DemoResult<()> {
 
                 let layout = build_demo_layout(&viewport, shader_control_value);
                 let mvp = static_demo_mvp(&camera, &layout.scene_viewport);
+                let shading = shader_flow_parameters(shader_control_value);
                 let uniform_subbuffer = match Buffer::from_data(
                     memory_allocator.as_ref(),
                     BufferCreateInfo {
@@ -545,7 +557,7 @@ fn run() -> DemoResult<()> {
                         usage: MemoryUsage::Upload,
                         ..Default::default()
                     },
-                    SceneUniformData { mvp },
+                    SceneUniformData { mvp, shading },
                 ) {
                     Ok(buffer) => buffer,
                     Err(error) => {
@@ -1322,6 +1334,16 @@ fn static_demo_mvp(camera: &CameraConfig, viewport: &Viewport) -> Matrix4 {
     multiply_matrices(projection, multiply_matrices(view, model))
 }
 
+fn shader_flow_parameters(slider_value: SliderValue) -> [f32; 4] {
+    let control = slider_value.get().clamp(0.0, 1.0);
+    let flow_strength = control;
+    let ambient_floor = 0.18 + 0.12 * (1.0 - control);
+    let contrast = 0.55 + 0.45 * control;
+    let phase = control;
+
+    [flow_strength, ambient_floor, contrast, phase]
+}
+
 fn load_wgsl_shader(
     device: Arc<Device>,
     source: &str,
@@ -1350,8 +1372,8 @@ fn load_wgsl_shader(
 mod tests {
     use super::{
         build_demo_layout, build_ui_vertices, generate_toroid_mesh, multiply_matrices,
-        rotation_x, slider_value_from_cursor, static_demo_mvp, translation, viewport_from_extent,
-        CameraConfig, SliderValue, ToroidSpec, Viewport,
+        rotation_x, shader_flow_parameters, slider_value_from_cursor, static_demo_mvp,
+        translation, viewport_from_extent, CameraConfig, SliderValue, ToroidSpec, Viewport,
     };
 
     #[test]
@@ -1417,5 +1439,18 @@ mod tests {
         let vertices = build_ui_vertices(&layout, slider_value);
 
         assert_eq!(vertices.len(), 30);
+    }
+
+    #[test]
+    fn shader_flow_parameters_are_clamped_and_finite() {
+        let low = shader_flow_parameters(SliderValue::new_clamped(-10.0));
+        let high = shader_flow_parameters(SliderValue::new_clamped(10.0));
+
+        assert_eq!(low[0], 0.0);
+        assert!(low.iter().all(|value| value.is_finite()));
+        assert_eq!(high[0], 1.0);
+        assert!(high.iter().all(|value| value.is_finite()));
+        assert!(high[1] < low[1]);
+        assert!(high[2] > low[2]);
     }
 }
