@@ -47,3 +47,9 @@
   - Integrate shading with the Vulkan rendering pipeline.
   - Connect the Phase 3 slider state to shader uniforms or push constants.
   - Optimize for real-time performance.
+
+### Phase 4 current deliverable
+- Slider-driven magnetic-field visualization is wired into `src/bin/toroid_vulkan_demo.rs` through the scene uniform buffer.
+- The toroid now responds in real time to the right-side control slider with animated magnetic field bands that circulate around the ring.
+- The rendering pipeline remains the same; the change is localized to per-frame uniform data and shader logic.
+

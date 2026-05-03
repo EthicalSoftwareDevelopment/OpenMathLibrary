@@ -3,6 +3,8 @@
 `open_math_library` is a Rust crate that collects reusable formulas and numerical helpers for
 actuarial mathematics, arithmetic, and engineering calculations.
 
+![phase4-vulkan-orbitals.png](/images/phase4-vulkan-orbitals.png)
+
 ## Modules
 
 - `actuarial_and_arithmetic`
@@ -90,7 +92,7 @@ cargo run --features vulkan-demo --bin toroid_vulkan_demo
 For day-to-day development, the repository now includes shorter launch helpers:
 
 - Cargo alias: `cargo demo`
-- Windows launcher: `Run.bat`
+- Windows launcher: `run_demo.ps1`
 - Linux launcher: `run_demo.sh`
 
 Current demo behavior:
@@ -320,4 +322,3 @@ Retry with:
 cargo build --features vulkan-demo --bin toroid_vulkan_demo
 cargo run --features vulkan-demo --bin toroid_vulkan_demo
 ```
-
