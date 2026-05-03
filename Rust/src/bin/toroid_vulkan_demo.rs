@@ -215,7 +215,7 @@ const EMF_FIELD_MAGNETIC_ORBIT_COUNT: usize =
     EMF_FIELD_TOROID_ORBIT_COUNT + EMF_FIELD_COIL_ORBIT_COUNT;
 const EMF_FIELD_MAGNETIC_SEGMENTS: usize = EMF_FIELD_SEGMENTS;
 const EMF_FIELD_ELECTRIC_COLOR: [f32; 3] = [0.18, 0.70, 0.98];
-const EMF_FIELD_MAGNETIC_COLOR: [f32; 3] = [0.98, 0.42, 0.22];
+const EMF_FIELD_MAGNETIC_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
 const TESLA_ARC_HIGH_COLOR: [f32; 3] = [0.24, 0.26, 0.30];
 const SCIENTIFIC_TEXT_COLOR: [f32; 3] = [0.82, 0.88, 0.96];
 const SCIENTIFIC_MUTED_COLOR: [f32; 3] = [0.55, 0.64, 0.78];
@@ -223,14 +223,29 @@ const SCIENTIFIC_LABEL_BACKGROUND: [f32; 3] = [0.08, 0.10, 0.14];
 const SCIENTIFIC_MARKER_V0_COLOR: [f32; 3] = [0.18, 0.78, 0.86];
 const SCIENTIFIC_MARKER_V1_COLOR: [f32; 3] = [0.78, 0.82, 0.88];
 const SCIENTIFIC_MARKER_Q_COLOR: [f32; 3] = EMF_FIELD_ELECTRIC_COLOR;
+const TEMPERATURE_RANGE_GAP_PX: f32 = 18.0;
+const TEMPERATURE_RANGE_TOP_COLOR: [f32; 3] = [1.0, 0.18, 0.18];
+const TEMPERATURE_RANGE_BOTTOM_COLOR: [f32; 3] = [0.18, 0.34, 1.0];
+const TEMPERATURE_RANGE_SEGMENTS: usize = 24;
+const TEMPERATURE_RANGE_BORDER_PX: f32 = 1.5;
+const TEMPERATURE_TICK_WIDTH_PX: f32 = 8.0;
+const TEMPERATURE_TICK_HEIGHT_PX: f32 = 2.0;
+const TEMPERATURE_TITLE_GAP_PX: f32 = 8.0;
 const ORBITAL_BUTTON_HEIGHT_PX: f32 = 34.0;
 const ORBITAL_BUTTON_GAP_PX: f32 = 10.0;
 const ORBITAL_BUTTON_ACTIVE_COLOR: [f32; 3] = [0.20, 0.34, 0.58];
 const ORBITAL_BUTTON_IDLE_COLOR: [f32; 3] = [0.12, 0.16, 0.23];
 const ORBITAL_BUTTON_BORDER_COLOR: [f32; 3] = [0.32, 0.40, 0.55];
-const S_ORBITAL_COLOR: [f32; 3] = [0.70, 0.76, 0.92];
-const D_ORBITAL_POSITIVE_COLOR: [f32; 3] = [0.86, 0.58, 0.22];
-const D_ORBITAL_NEGATIVE_COLOR: [f32; 3] = [0.29, 0.45, 0.87];
+const ORBITAL_PARTICLE_COLOR: [f32; 3] = [0.62, 0.64, 0.68];
+const ORBITAL_WAKE_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
+const ORBITAL_PATH_RADIUS: f32 = TOROID_MAJOR_RADIUS + TOROID_MINOR_RADIUS * 0.82;
+const ORBITAL_VERTICAL_AMPLITUDE: f32 = 0.22;
+const ORBITAL_ANGULAR_SPEED: f32 = 0.68;
+const ORBITAL_WAKE_SAMPLES: usize = 18;
+const ORBITAL_WAKE_TIME_STEP: f32 = 0.09;
+const ORBITAL_WAKE_WIDTH: f32 = 0.013;
+const ORBITAL_PARTICLE_SIZE: f32 = 0.046;
+const D_ORBITAL_PARTICLE_RADIUS: f32 = 0.17;
 
 #[derive(Debug)]
 struct ToroidMesh {
@@ -393,6 +408,7 @@ struct DemoLayout {
     ui_viewport: Viewport,
     panel_rect: Rect,
     divider_rect: Rect,
+    temperature_range_rect: Rect,
     slider_track_rect: Rect,
     slider_hit_rect: Rect,
     slider_knob_rect: Rect,
@@ -517,57 +533,6 @@ fn run() -> DemoResult<()> {
         },
         coil_mesh.indices.iter().copied(),
     )?;
-    let s_orbital_mesh = generate_s_orbital_mesh();
-    let s_orbital_vertex_buffer = Buffer::from_iter(
-        memory_allocator.as_ref(),
-        BufferCreateInfo {
-            usage: BufferUsage::VERTEX_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            usage: MemoryUsage::Upload,
-            ..Default::default()
-        },
-        s_orbital_mesh.vertices.iter().copied(),
-    )?;
-    let s_orbital_index_buffer = Buffer::from_iter(
-        memory_allocator.as_ref(),
-        BufferCreateInfo {
-            usage: BufferUsage::INDEX_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            usage: MemoryUsage::Upload,
-            ..Default::default()
-        },
-        s_orbital_mesh.indices.iter().copied(),
-    )?;
-    let d_orbital_mesh = generate_d_orbital_mesh();
-    let d_orbital_vertex_buffer = Buffer::from_iter(
-        memory_allocator.as_ref(),
-        BufferCreateInfo {
-            usage: BufferUsage::VERTEX_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            usage: MemoryUsage::Upload,
-            ..Default::default()
-        },
-        d_orbital_mesh.vertices.iter().copied(),
-    )?;
-    let d_orbital_index_buffer = Buffer::from_iter(
-        memory_allocator.as_ref(),
-        BufferCreateInfo {
-            usage: BufferUsage::INDEX_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            usage: MemoryUsage::Upload,
-            ..Default::default()
-        },
-        d_orbital_mesh.indices.iter().copied(),
-    )?;
-
     let vs = load_wgsl_shader(
         device.clone(),
         SCENE_VERTEX_SHADER_WGSL,
@@ -804,6 +769,8 @@ fn run() -> DemoResult<()> {
                 let mvp = static_demo_mvp(&camera, &layout.scene_viewport);
                 let shading = shader_flow_parameters(shader_control_value);
                 let animation_seconds = animation_start.elapsed().as_secs_f32();
+                let orbital_effect_vertices =
+                    build_orbital_effect_vertices(selected_orbital, animation_seconds);
                 let uniform_subbuffer = match Buffer::from_data(
                     memory_allocator.as_ref(),
                     BufferCreateInfo {
@@ -823,7 +790,6 @@ fn run() -> DemoResult<()> {
                         return;
                     }
                 };
-
                 let ui_vertices = build_ui_vertices(
                     &layout,
                     shader_control_value,
@@ -851,8 +817,9 @@ fn run() -> DemoResult<()> {
                     }
                 };
 
-                let arc_vertices =
+                let mut arc_vertices =
                     build_tesla_arc_vertices(shader_control_value, animation_seconds);
+                arc_vertices.extend(orbital_effect_vertices);
                 let arc_vertex_buffer = match Buffer::from_iter(
                     memory_allocator.as_ref(),
                     BufferCreateInfo {
@@ -963,34 +930,6 @@ fn run() -> DemoResult<()> {
                     eprintln!("Failed to draw Tesla coil mesh: {error}");
                     *control_flow = ControlFlow::Exit;
                     return;
-                }
-
-                match selected_orbital {
-                    SelectedOrbital::S => {
-                        builder.bind_vertex_buffers(0, s_orbital_vertex_buffer.clone());
-                        builder.bind_index_buffer(s_orbital_index_buffer.clone());
-
-                        if let Err(error) =
-                            builder.draw_indexed(s_orbital_index_buffer.len() as u32, 1, 0, 0, 0)
-                        {
-                            eprintln!("Failed to draw s orbital mesh: {error}");
-                            *control_flow = ControlFlow::Exit;
-                            return;
-                        }
-                    }
-                    SelectedOrbital::D => {
-                        builder.bind_vertex_buffers(0, d_orbital_vertex_buffer.clone());
-                        builder.bind_index_buffer(d_orbital_index_buffer.clone());
-
-                        if let Err(error) =
-                            builder.draw_indexed(d_orbital_index_buffer.len() as u32, 1, 0, 0, 0)
-                        {
-                            eprintln!("Failed to draw d orbital mesh: {error}");
-                            *control_flow = ControlFlow::Exit;
-                            return;
-                        }
-                    }
-                    SelectedOrbital::None => {}
                 }
 
                 builder.bind_pipeline_graphics(emf_pipeline.clone());
@@ -1479,6 +1418,17 @@ fn build_demo_layout(full_viewport: &Viewport, slider_value: SliderValue) -> Dem
         zero_rect()
     };
 
+    let temperature_range_rect = if panel_width > 0.0 {
+        Rect {
+            left: slider_track_rect.left - TEMPERATURE_RANGE_GAP_PX - slider_track_rect.width(),
+            top: slider_track_rect.top,
+            right: slider_track_rect.left - TEMPERATURE_RANGE_GAP_PX,
+            bottom: slider_track_rect.bottom,
+        }
+    } else {
+        zero_rect()
+    };
+
     let slider_center_y = slider_center_y(&slider_track_rect, slider_value);
     let slider_knob_rect = if panel_width > 0.0 {
         Rect {
@@ -1527,6 +1477,7 @@ fn build_demo_layout(full_viewport: &Viewport, slider_value: SliderValue) -> Dem
         ui_viewport: full_viewport.clone(),
         panel_rect,
         divider_rect,
+        temperature_range_rect,
         slider_track_rect,
         slider_hit_rect,
         slider_knob_rect,
@@ -1584,6 +1535,15 @@ fn build_ui_vertices(
         &layout.ui_viewport,
         [0.18, 0.21, 0.30],
     );
+    push_vertical_gradient_rect(
+        &mut vertices,
+        &layout.temperature_range_rect,
+        &layout.ui_viewport,
+        TEMPERATURE_RANGE_TOP_COLOR,
+        TEMPERATURE_RANGE_BOTTOM_COLOR,
+        TEMPERATURE_RANGE_SEGMENTS,
+    );
+    push_temperature_scale_labels(&mut vertices, layout);
 
     let slider_fill_rect = Rect {
         left: layout.slider_track_rect.left,
@@ -1591,11 +1551,12 @@ fn build_ui_vertices(
         right: layout.slider_track_rect.right,
         bottom: layout.slider_track_rect.bottom,
     };
+    let slider_fill_color = temperature_color_from_slider_value(slider_value);
     push_rect(
         &mut vertices,
         &slider_fill_rect,
         &layout.ui_viewport,
-        [0.22, 0.58, 0.92],
+        slider_fill_color,
     );
     push_rect(
         &mut vertices,
@@ -1606,6 +1567,7 @@ fn build_ui_vertices(
 
     let overlay = build_scientific_overlay(slider_value, time_seconds);
     push_scientific_panel(&mut vertices, layout, &overlay);
+    push_orbital_heading(&mut vertices, layout);
     push_orbital_button(
         &mut vertices,
         &layout.s_orbital_button_rect,
@@ -1623,6 +1585,188 @@ fn build_ui_vertices(
     push_projected_vertex_labels(&mut vertices, layout, scene_mvp, &overlay);
 
     vertices
+}
+
+fn push_vertical_gradient_rect(
+    vertices: &mut Vec<UiVertex>,
+    rect: &Rect,
+    viewport: &Viewport,
+    top_color: [f32; 3],
+    bottom_color: [f32; 3],
+    segments: usize,
+) {
+    if rect.width() <= 0.0 || rect.height() <= 0.0 || segments == 0 {
+        return;
+    }
+
+    for segment_index in 0..segments {
+        let progress_start = segment_index as f32 / segments as f32;
+        let segment_rect = Rect {
+            left: rect.left,
+            top: rect.top + rect.height() * progress_start,
+            right: rect.right,
+            bottom: rect.top + rect.height() * ((segment_index + 1) as f32 / segments as f32),
+        };
+        let color = lerp_vec3(top_color, bottom_color, progress_start);
+        push_rect(vertices, &segment_rect, viewport, color);
+    }
+}
+
+fn push_rect_border(
+    vertices: &mut Vec<UiVertex>,
+    rect: &Rect,
+    viewport: &Viewport,
+    color: [f32; 3],
+    thickness: f32,
+) {
+    if rect.width() <= 0.0 || rect.height() <= 0.0 || thickness <= 0.0 {
+        return;
+    }
+
+    push_rect(
+        vertices,
+        &Rect {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: (rect.top + thickness).min(rect.bottom),
+        },
+        viewport,
+        color,
+    );
+    push_rect(
+        vertices,
+        &Rect {
+            left: rect.left,
+            top: (rect.bottom - thickness).max(rect.top),
+            right: rect.right,
+            bottom: rect.bottom,
+        },
+        viewport,
+        color,
+    );
+    push_rect(
+        vertices,
+        &Rect {
+            left: rect.left,
+            top: rect.top,
+            right: (rect.left + thickness).min(rect.right),
+            bottom: rect.bottom,
+        },
+        viewport,
+        color,
+    );
+    push_rect(
+        vertices,
+        &Rect {
+            left: (rect.right - thickness).max(rect.left),
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+        },
+        viewport,
+        color,
+    );
+}
+
+fn push_temperature_scale_labels(vertices: &mut Vec<UiVertex>, layout: &DemoLayout) {
+    if layout.temperature_range_rect.width() <= 0.0 {
+        return;
+    }
+
+    push_rect_border(
+        vertices,
+        &layout.temperature_range_rect,
+        &layout.ui_viewport,
+        ORBITAL_BUTTON_BORDER_COLOR,
+        TEMPERATURE_RANGE_BORDER_PX,
+    );
+
+    let title = "TEMP";
+    let (title_width, title_height) = text_pixel_size(title, 1.0);
+    let title_x = layout.temperature_range_rect.left
+        + (layout.temperature_range_rect.width() - title_width) * 0.5;
+    let title_y = (layout.temperature_range_rect.top - title_height - TEMPERATURE_TITLE_GAP_PX)
+        .max(layout.panel_rect.top + 4.0);
+    push_text(
+        vertices,
+        title,
+        title_x,
+        title_y,
+        1.0,
+        &layout.ui_viewport,
+        SCIENTIFIC_TEXT_COLOR,
+    );
+
+    let labels = [
+        (200, 0.0_f32),
+        (150, 0.25),
+        (100, 0.5),
+        (50, 0.75),
+        (0, 1.0),
+    ];
+
+    for (temperature_c, progress) in labels {
+        let label = format!("{temperature_c} C");
+        let (text_width, text_height) = text_pixel_size(&label, 0.9);
+        let tick_center_y =
+            layout.temperature_range_rect.top + layout.temperature_range_rect.height() * progress;
+        let tick_rect = Rect {
+            left: layout.temperature_range_rect.left - TEMPERATURE_TICK_WIDTH_PX - 4.0,
+            top: tick_center_y - TEMPERATURE_TICK_HEIGHT_PX * 0.5,
+            right: layout.temperature_range_rect.left - 4.0,
+            bottom: tick_center_y + TEMPERATURE_TICK_HEIGHT_PX * 0.5,
+        };
+        push_rect(
+            vertices,
+            &tick_rect,
+            &layout.ui_viewport,
+            SCIENTIFIC_TEXT_COLOR,
+        );
+
+        let x = layout.temperature_range_rect.left - text_width - 8.0;
+        let y = tick_center_y - text_height * 0.5;
+        push_text(
+            vertices,
+            &label,
+            x,
+            y,
+            0.9,
+            &layout.ui_viewport,
+            SCIENTIFIC_MUTED_COLOR,
+        );
+    }
+}
+
+fn temperature_color_from_slider_value(slider_value: SliderValue) -> [f32; 3] {
+    let gradient_progress = 1.0 - slider_value.get().clamp(0.0, 1.0);
+    lerp_vec3(
+        TEMPERATURE_RANGE_TOP_COLOR,
+        TEMPERATURE_RANGE_BOTTOM_COLOR,
+        gradient_progress,
+    )
+}
+
+fn push_orbital_heading(vertices: &mut Vec<UiVertex>, layout: &DemoLayout) {
+    if layout.s_orbital_button_rect.width() <= 0.0 {
+        return;
+    }
+
+    let label = "ORBITAL";
+    let (text_width, text_height) = text_pixel_size(label, 1.2);
+    let x = layout.s_orbital_button_rect.left
+        + (layout.s_orbital_button_rect.width() - text_width) * 0.5;
+    let y =
+        (layout.s_orbital_button_rect.top - text_height - 10.0).max(layout.panel_rect.top + 8.0);
+    push_text(
+        vertices,
+        label,
+        x,
+        y,
+        1.2,
+        &layout.ui_viewport,
+        SCIENTIFIC_TEXT_COLOR,
+    );
 }
 
 fn push_orbital_button(
@@ -1646,51 +1790,7 @@ fn push_orbital_button(
             ORBITAL_BUTTON_IDLE_COLOR
         },
     );
-    let border = 2.0;
-    push_rect(
-        vertices,
-        &Rect {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.top + border,
-        },
-        viewport,
-        ORBITAL_BUTTON_BORDER_COLOR,
-    );
-    push_rect(
-        vertices,
-        &Rect {
-            left: rect.left,
-            top: rect.bottom - border,
-            right: rect.right,
-            bottom: rect.bottom,
-        },
-        viewport,
-        ORBITAL_BUTTON_BORDER_COLOR,
-    );
-    push_rect(
-        vertices,
-        &Rect {
-            left: rect.left,
-            top: rect.top,
-            right: rect.left + border,
-            bottom: rect.bottom,
-        },
-        viewport,
-        ORBITAL_BUTTON_BORDER_COLOR,
-    );
-    push_rect(
-        vertices,
-        &Rect {
-            left: rect.right - border,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-        },
-        viewport,
-        ORBITAL_BUTTON_BORDER_COLOR,
-    );
+    push_rect_border(vertices, rect, viewport, ORBITAL_BUTTON_BORDER_COLOR, 2.0);
 
     let (text_width, text_height) = text_pixel_size(label, 1.4);
     let text_x = rect.left + (rect.width() - text_width) * 0.5;
@@ -1943,6 +2043,9 @@ fn glyph_bitmap(character: char) -> Option<[u8; 7]> {
         'L' => Some([
             0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111,
         ]),
+        'M' => Some([
+            0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001,
+        ]),
         'N' => Some([
             0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001,
         ]),
@@ -1951,6 +2054,9 @@ fn glyph_bitmap(character: char) -> Option<[u8; 7]> {
         ]),
         'Q' => Some([
             0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101,
+        ]),
+        'P' => Some([
+            0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000,
         ]),
         'R' => Some([
             0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001,
@@ -2211,111 +2317,188 @@ fn generate_coil_mesh() -> ToroidMesh {
     ToroidMesh { vertices, indices }
 }
 
-fn generate_s_orbital_mesh() -> ToroidMesh {
-    let mut mesh = ToroidMesh {
-        vertices: Vec::new(),
-        indices: Vec::new(),
-    };
+fn build_orbital_effect_vertices(
+    selected_orbital: SelectedOrbital,
+    time_seconds: f32,
+) -> Vec<ArcVertex> {
+    if selected_orbital == SelectedOrbital::None {
+        return Vec::new();
+    }
 
-    append_ellipsoid_patch(
-        &mut mesh,
-        [0.0, 0.0, 0.0],
-        [0.38, 0.38, 0.38],
-        S_ORBITAL_COLOR,
-        20,
-        12,
+    let particle_count = orbital_particle_count(selected_orbital);
+    let mut vertices =
+        Vec::with_capacity(particle_count * ORBITAL_WAKE_SAMPLES * 6 + particle_count * 12);
+
+    for particle_index in 0..particle_count {
+        let mut wake_points = Vec::with_capacity(ORBITAL_WAKE_SAMPLES);
+        for sample_index in (0..ORBITAL_WAKE_SAMPLES).rev() {
+            let sample_time =
+                (time_seconds - sample_index as f32 * ORBITAL_WAKE_TIME_STEP).max(0.0);
+            wake_points.push(orbital_particle_center(
+                selected_orbital,
+                sample_time,
+                particle_index,
+            ));
+        }
+        append_arc_strip(
+            &mut vertices,
+            &wake_points,
+            ORBITAL_WAKE_WIDTH,
+            ORBITAL_WAKE_COLOR,
+        );
+
+        let particle_center =
+            orbital_particle_center(selected_orbital, time_seconds, particle_index);
+        let (_, radial, vertical, tangent) = orbital_pose(time_seconds);
+        append_particle_billboard(
+            &mut vertices,
+            particle_center,
+            radial,
+            vertical,
+            tangent,
+            ORBITAL_PARTICLE_SIZE,
+            ORBITAL_PARTICLE_COLOR,
+        );
+    }
+
+    vertices
+}
+
+fn orbital_particle_count(selected_orbital: SelectedOrbital) -> usize {
+    match selected_orbital {
+        SelectedOrbital::None => 0,
+        SelectedOrbital::S => 1,
+        SelectedOrbital::D => 4,
+    }
+}
+
+fn orbital_particle_center(
+    selected_orbital: SelectedOrbital,
+    time_seconds: f32,
+    particle_index: usize,
+) -> [f32; 3] {
+    let (center, radial, vertical, tangent) = orbital_pose(time_seconds);
+
+    match selected_orbital {
+        SelectedOrbital::None => center,
+        SelectedOrbital::S => center,
+        SelectedOrbital::D => {
+            let (radial_basis, vertical_basis) =
+                rotate_basis_around_axis(radial, vertical, tangent, time_seconds * 1.35);
+            let offsets = [
+                scale_vec3(radial_basis, D_ORBITAL_PARTICLE_RADIUS),
+                scale_vec3(radial_basis, -D_ORBITAL_PARTICLE_RADIUS),
+                scale_vec3(vertical_basis, D_ORBITAL_PARTICLE_RADIUS),
+                scale_vec3(vertical_basis, -D_ORBITAL_PARTICLE_RADIUS),
+            ];
+            add_vec3(center, offsets[particle_index % offsets.len()])
+        }
+    }
+}
+
+fn append_particle_billboard(
+    vertices: &mut Vec<ArcVertex>,
+    center: [f32; 3],
+    radial: [f32; 3],
+    vertical: [f32; 3],
+    tangent: [f32; 3],
+    size: f32,
+    color: [f32; 3],
+) {
+    append_particle_quad(vertices, center, radial, vertical, size, color);
+    append_particle_quad(vertices, center, vertical, tangent, size * 0.85, color);
+}
+
+fn append_particle_quad(
+    vertices: &mut Vec<ArcVertex>,
+    center: [f32; 3],
+    axis_a: [f32; 3],
+    axis_b: [f32; 3],
+    size: f32,
+    color: [f32; 3],
+) {
+    let a = scale_vec3(axis_a, size);
+    let b = scale_vec3(axis_b, size);
+    let top_left = add_vec3(center, add_vec3(scale_vec3(a, -1.0), b));
+    let top_right = add_vec3(center, add_vec3(a, b));
+    let bottom_right = add_vec3(center, add_vec3(a, scale_vec3(b, -1.0)));
+    let bottom_left = add_vec3(center, add_vec3(scale_vec3(a, -1.0), scale_vec3(b, -1.0)));
+
+    vertices.extend_from_slice(&[
+        ArcVertex {
+            position: top_left,
+            color,
+        },
+        ArcVertex {
+            position: top_right,
+            color,
+        },
+        ArcVertex {
+            position: bottom_right,
+            color,
+        },
+        ArcVertex {
+            position: top_left,
+            color,
+        },
+        ArcVertex {
+            position: bottom_right,
+            color,
+        },
+        ArcVertex {
+            position: bottom_left,
+            color,
+        },
+    ]);
+}
+
+fn orbital_pose(time_seconds: f32) -> ([f32; 3], [f32; 3], [f32; 3], [f32; 3]) {
+    let angle = time_seconds * ORBITAL_ANGULAR_SPEED;
+    let (sine, cosine) = angle.sin_cos();
+    let center = [
+        ORBITAL_PATH_RADIUS * cosine,
+        ORBITAL_VERTICAL_AMPLITUDE * (time_seconds * 0.6).sin(),
+        ORBITAL_PATH_RADIUS * sine,
+    ];
+    let tangent = normalize_vec3([
+        -ORBITAL_PATH_RADIUS * ORBITAL_ANGULAR_SPEED * sine,
+        ORBITAL_VERTICAL_AMPLITUDE * 0.6 * (time_seconds * 0.6).cos(),
+        ORBITAL_PATH_RADIUS * ORBITAL_ANGULAR_SPEED * cosine,
+    ]);
+    let outward = normalize_vec3([cosine, 0.0, sine]);
+    let mut vertical = cross_vec3(tangent, outward);
+    if length_vec3(vertical) <= 1e-5 {
+        vertical = [0.0, 1.0, 0.0];
+    }
+    let vertical = normalize_vec3(vertical);
+    let radial = normalize_vec3(cross_vec3(vertical, tangent));
+
+    (center, radial, vertical, tangent)
+}
+
+fn rotate_basis_around_axis(
+    basis_x: [f32; 3],
+    basis_y: [f32; 3],
+    axis: [f32; 3],
+    angle: f32,
+) -> ([f32; 3], [f32; 3]) {
+    (
+        rotate_vec3_around_axis(basis_x, axis, angle),
+        rotate_vec3_around_axis(basis_y, axis, angle),
+    )
+}
+
+fn rotate_vec3_around_axis(vector: [f32; 3], axis: [f32; 3], angle: f32) -> [f32; 3] {
+    let axis = normalize_vec3(axis);
+    let (sine, cosine) = angle.sin_cos();
+    let parallel = scale_vec3(axis, dot_vec3(axis, vector));
+    let perpendicular = sub_vec3(vector, parallel);
+    let perpendicular_rotated = add_vec3(
+        scale_vec3(perpendicular, cosine),
+        scale_vec3(cross_vec3(axis, perpendicular), sine),
     );
 
-    mesh
-}
-
-fn generate_d_orbital_mesh() -> ToroidMesh {
-    let mut mesh = ToroidMesh {
-        vertices: Vec::new(),
-        indices: Vec::new(),
-    };
-    let lobes = [
-        (
-            [0.48, 0.0, 0.0],
-            [0.28, 0.18, 0.18],
-            D_ORBITAL_POSITIVE_COLOR,
-        ),
-        (
-            [-0.48, 0.0, 0.0],
-            [0.28, 0.18, 0.18],
-            D_ORBITAL_POSITIVE_COLOR,
-        ),
-        (
-            [0.0, 0.0, 0.48],
-            [0.18, 0.18, 0.28],
-            D_ORBITAL_NEGATIVE_COLOR,
-        ),
-        (
-            [0.0, 0.0, -0.48],
-            [0.18, 0.18, 0.28],
-            D_ORBITAL_NEGATIVE_COLOR,
-        ),
-    ];
-
-    for (center, radii, color) in lobes {
-        append_ellipsoid_patch(&mut mesh, center, radii, color, 16, 10);
-    }
-
-    mesh
-}
-
-fn append_ellipsoid_patch(
-    mesh: &mut ToroidMesh,
-    center: [f32; 3],
-    radii: [f32; 3],
-    color: [f32; 3],
-    longitude_segments: u32,
-    latitude_segments: u32,
-) {
-    let base_index = mesh.vertices.len() as u32;
-
-    for latitude_index in 0..=latitude_segments {
-        let v = latitude_index as f32 / latitude_segments.max(1) as f32;
-        let theta = v * PI;
-        let (theta_sin, theta_cos) = theta.sin_cos();
-
-        for longitude_index in 0..=longitude_segments {
-            let u = longitude_index as f32 / longitude_segments.max(1) as f32;
-            let phi = u * 2.0 * PI;
-            let (phi_sin, phi_cos) = phi.sin_cos();
-            let unit = [theta_sin * phi_cos, theta_cos, theta_sin * phi_sin];
-            let scaled = [unit[0] * radii[0], unit[1] * radii[1], unit[2] * radii[2]];
-            let position = add_vec3(center, scaled);
-            let normal = normalize_vec3([
-                unit[0] / radii[0].max(1e-4),
-                unit[1] / radii[1].max(1e-4),
-                unit[2] / radii[2].max(1e-4),
-            ]);
-
-            mesh.vertices.push(SceneVertex {
-                position,
-                normal,
-                color,
-            });
-        }
-    }
-
-    let row_stride = longitude_segments + 1;
-    for latitude_index in 0..latitude_segments {
-        for longitude_index in 0..longitude_segments {
-            let current = base_index + latitude_index * row_stride + longitude_index;
-            let next = current + row_stride;
-
-            mesh.indices.extend_from_slice(&[
-                current,
-                next,
-                current + 1,
-                current + 1,
-                next,
-                next + 1,
-            ]);
-        }
-    }
+    add_vec3(parallel, perpendicular_rotated)
 }
 
 fn tesla_arc_profile(slider_value: SliderValue) -> TeslaArcProfile {
@@ -2827,16 +3010,17 @@ fn load_wgsl_shader(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_demo_layout, build_emf_field_vertices, build_tesla_arc_points,
-        build_tesla_arc_vertices, build_ui_vertices, dot_vec3, generate_coil_mesh,
-        generate_d_orbital_mesh, generate_s_orbital_mesh, generate_toroid_mesh, multiply_matrices,
-        normalize_vec3, polyline_length, rotation_x, shader_flow_parameters,
+        build_demo_layout, build_emf_field_vertices, build_orbital_effect_vertices,
+        build_tesla_arc_points, build_tesla_arc_vertices, build_ui_vertices, dot_vec3,
+        generate_coil_mesh, generate_toroid_mesh, length_vec3, multiply_matrices, normalize_vec3,
+        orbital_particle_center, orbital_pose, polyline_length, rotation_x, shader_flow_parameters,
         slider_value_from_cursor, static_demo_mvp, sub_vec3, tesla_arc_frame, tesla_arc_profile,
         translation, viewport_from_extent, CameraConfig, SelectedOrbital, SliderValue, ToroidSpec,
-        Viewport, D_ORBITAL_NEGATIVE_COLOR, D_ORBITAL_POSITIVE_COLOR, EMF_FIELD_ELECTRIC_COLOR,
-        EMF_FIELD_ELECTRIC_X_SAMPLES, EMF_FIELD_ELECTRIC_Y_SAMPLES, EMF_FIELD_ELECTRIC_Z_SAMPLES,
-        EMF_FIELD_MAGNETIC_COLOR, EMF_FIELD_MAGNETIC_ORBIT_COUNT, EMF_FIELD_MAGNETIC_SEGMENTS,
-        S_ORBITAL_COLOR, TESLA_ARC_HIGH_COLOR, TESLA_ARC_SEGMENTS, TOROID_MAJOR_RADIUS,
+        Viewport, EMF_FIELD_ELECTRIC_COLOR, EMF_FIELD_ELECTRIC_X_SAMPLES,
+        EMF_FIELD_ELECTRIC_Y_SAMPLES, EMF_FIELD_ELECTRIC_Z_SAMPLES, EMF_FIELD_MAGNETIC_COLOR,
+        EMF_FIELD_MAGNETIC_ORBIT_COUNT, EMF_FIELD_MAGNETIC_SEGMENTS, ORBITAL_PARTICLE_COLOR,
+        ORBITAL_PARTICLE_SIZE, ORBITAL_PATH_RADIUS, ORBITAL_WAKE_COLOR,
+        TEMPERATURE_RANGE_TOP_COLOR, TESLA_ARC_HIGH_COLOR, TESLA_ARC_SEGMENTS, TOROID_MAJOR_RADIUS,
     };
 
     #[test]
@@ -2882,6 +3066,11 @@ mod tests {
         assert!(layout.scene_viewport.dimensions[0] < full_viewport.dimensions[0]);
         assert!(layout.panel_rect.left >= layout.scene_viewport.dimensions[0]);
         assert!(layout.slider_track_rect.left >= layout.panel_rect.left);
+        assert!(layout.temperature_range_rect.left < layout.slider_track_rect.left);
+        assert_eq!(
+            layout.temperature_range_rect.height(),
+            layout.slider_track_rect.height()
+        );
         assert!(layout.s_orbital_button_rect.top >= layout.panel_rect.top);
         assert!(layout.d_orbital_button_rect.bottom <= layout.panel_rect.bottom);
     }
@@ -2914,37 +3103,74 @@ mod tests {
             vertex.position.iter().all(|value| value.is_finite())
                 && vertex.color.iter().all(|value| value.is_finite())
         }));
+        assert!(vertices
+            .iter()
+            .any(|vertex| vertex.color == TEMPERATURE_RANGE_TOP_COLOR));
+        assert!(vertices
+            .iter()
+            .any(|vertex| vertex.color[2] > vertex.color[0]));
     }
 
     #[test]
-    fn orbital_meshes_are_finite_and_indexed() {
-        let s_mesh = generate_s_orbital_mesh();
-        let d_mesh = generate_d_orbital_mesh();
+    fn orbital_effect_vertices_include_gray_particles_and_white_wakes() {
+        let s_vertices = build_orbital_effect_vertices(SelectedOrbital::S, 0.8);
+        let d_vertices = build_orbital_effect_vertices(SelectedOrbital::D, 0.8);
 
-        for mesh in [&s_mesh, &d_mesh] {
-            assert!(!mesh.vertices.is_empty());
-            assert!(!mesh.indices.is_empty());
-            assert!(mesh
-                .vertices
-                .iter()
-                .all(|vertex| vertex.position.iter().all(|value| value.is_finite())));
-            assert!(mesh
-                .indices
-                .iter()
-                .all(|&index| (index as usize) < mesh.vertices.len()));
-        }
-        assert!(s_mesh
-            .vertices
+        assert!(!s_vertices.is_empty());
+        assert!(!d_vertices.is_empty());
+        assert!(s_vertices
             .iter()
-            .any(|vertex| vertex.color == S_ORBITAL_COLOR));
-        assert!(d_mesh
-            .vertices
+            .all(|vertex| vertex.position.iter().all(|value| value.is_finite())));
+        assert!(d_vertices
             .iter()
-            .any(|vertex| vertex.color == D_ORBITAL_POSITIVE_COLOR));
-        assert!(d_mesh
-            .vertices
+            .all(|vertex| vertex.position.iter().all(|value| value.is_finite())));
+        assert!(s_vertices
             .iter()
-            .any(|vertex| vertex.color == D_ORBITAL_NEGATIVE_COLOR));
+            .any(|vertex| vertex.color == ORBITAL_PARTICLE_COLOR));
+        assert!(s_vertices
+            .iter()
+            .any(|vertex| vertex.color == ORBITAL_WAKE_COLOR));
+        assert!(d_vertices
+            .iter()
+            .any(|vertex| vertex.color == ORBITAL_PARTICLE_COLOR));
+        assert!(d_vertices
+            .iter()
+            .any(|vertex| vertex.color == ORBITAL_WAKE_COLOR));
+    }
+
+    #[test]
+    fn selected_orbital_particles_move_along_toroid_path() {
+        let start_center = orbital_particle_center(SelectedOrbital::S, 0.0, 0);
+        let later_center = orbital_particle_center(SelectedOrbital::S, 1.5, 0);
+
+        assert!(length_vec3(sub_vec3(start_center, later_center)) > 0.25);
+        assert!((start_center[0].hypot(start_center[2]) - ORBITAL_PATH_RADIUS).abs() < 0.15);
+        assert!((later_center[0].hypot(later_center[2]) - ORBITAL_PATH_RADIUS).abs() < 0.15);
+    }
+
+    #[test]
+    fn d_orbital_uses_multiple_particle_lobes() {
+        let centers = [
+            orbital_particle_center(SelectedOrbital::D, 0.4, 0),
+            orbital_particle_center(SelectedOrbital::D, 0.4, 1),
+            orbital_particle_center(SelectedOrbital::D, 0.4, 2),
+            orbital_particle_center(SelectedOrbital::D, 0.4, 3),
+        ];
+
+        assert!(length_vec3(sub_vec3(centers[0], centers[1])) > ORBITAL_PARTICLE_SIZE * 4.0);
+        assert!(length_vec3(sub_vec3(centers[2], centers[3])) > ORBITAL_PARTICLE_SIZE * 4.0);
+    }
+
+    #[test]
+    fn orbital_pose_stays_finite_and_tangent_is_normalized() {
+        let (center, radial, vertical, tangent) = orbital_pose(2.4);
+
+        assert!(center.iter().all(|value| value.is_finite()));
+        assert!(radial.iter().all(|value| value.is_finite()));
+        assert!(vertical.iter().all(|value| value.is_finite()));
+        assert!(tangent.iter().all(|value| value.is_finite()));
+        assert!((length_vec3(tangent) - 1.0).abs() < 1e-4);
+        assert!(dot_vec3(radial, tangent).abs() < 1e-4);
     }
 
     #[test]
