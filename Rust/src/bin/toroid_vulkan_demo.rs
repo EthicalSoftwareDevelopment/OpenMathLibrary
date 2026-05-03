@@ -1,51 +1,275 @@
 use std::f32::consts::PI;
+use std::fmt;
 use std::sync::Arc;
 
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess};
+use bytemuck::{Pod, Zeroable};
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents,
+};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::descriptor_set::layout::{
+    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType,
 };
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::physical::PhysicalDeviceType;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo};
 use vulkano::format::Format;
-use vulkano::image::{view::ImageView, AttachmentImage, SwapchainImage};
-use vulkano::impl_vertex;
+use vulkano::image::{view::ImageView, AttachmentImage, ImageAccess, ImageUsage, SwapchainImage};
 use vulkano::instance::{Instance, InstanceCreateInfo};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::rasterization::{CullMode, FrontFace, RasterizationState};
-use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
+use vulkano::pipeline::graphics::vertex_input::Vertex;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
+use vulkano::pipeline::layout::{PipelineLayout, PipelineLayoutCreateInfo};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
+use vulkano::shader::ShaderModule;
+use vulkano::shader::ShaderStages;
 use vulkano::swapchain::{
-    self, acquire_next_image, AcquireError, PresentMode, Surface, Swapchain, SwapchainCreateInfo,
+    acquire_next_image, AcquireError, PresentMode, Surface, Swapchain, SwapchainCreateInfo,
     SwapchainCreationError, SwapchainPresentInfo,
 };
 use vulkano::sync::{self, FlushError, GpuFuture};
 use vulkano::VulkanLibrary;
 use vulkano_win::VkSurfaceBuild;
-use winit::event::{Event, WindowEvent};
+use winit::event::{ElementState, Event, MouseButton, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, Zeroable, Pod, Vertex)]
 #[repr(C)]
-struct Vertex {
+struct SceneVertex {
+    #[format(R32G32B32_SFLOAT)]
     position: [f32; 3],
+    #[format(R32G32B32_SFLOAT)]
     normal: [f32; 3],
+    #[format(R32G32B32_SFLOAT)]
     color: [f32; 3],
 }
 
-impl_vertex!(Vertex, position, normal, color);
+#[derive(Default, Debug, Clone, Copy, Zeroable, Pod, Vertex)]
+#[repr(C)]
+struct UiVertex {
+    #[format(R32G32_SFLOAT)]
+    position: [f32; 2],
+    #[format(R32G32B32_SFLOAT)]
+    color: [f32; 3],
+}
 
 type Matrix4 = [[f32; 4]; 4];
+type DemoResult<T> = Result<T, Box<dyn std::error::Error>>;
+type SwapchainBundle = (Arc<Swapchain>, Vec<Arc<SwapchainImage>>);
+type FramebufferBundle = (Vec<Arc<Framebuffer>>, Viewport);
+
+const SCENE_VERTEX_SHADER_WGSL: &str = r#"
+struct SceneUniforms {
+    mvp: mat4x4<f32>,
+};
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) color: vec3<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) vertex_color: vec3<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> uniforms: SceneUniforms;
+
+@vertex
+fn main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    let light_direction = normalize(vec3<f32>(0.4, 1.0, 0.7));
+    let diffuse = max(dot(normalize(input.normal), light_direction), 0.2);
+
+    output.position = uniforms.mvp * vec4<f32>(input.position, 1.0);
+    output.vertex_color = input.color * diffuse;
+    return output;
+}
+"#;
+
+const SCENE_FRAGMENT_SHADER_WGSL: &str = r#"
+@fragment
+fn main(@location(0) vertex_color: vec3<f32>) -> @location(0) vec4<f32> {
+    return vec4<f32>(vertex_color, 1.0);
+}
+"#;
+
+const UI_VERTEX_SHADER_WGSL: &str = r#"
+struct UiVertexInput {
+    @location(0) position: vec2<f32>,
+    @location(1) color: vec3<f32>,
+};
+
+struct UiVertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) vertex_color: vec3<f32>,
+};
+
+@vertex
+fn main(input: UiVertexInput) -> UiVertexOutput {
+    var output: UiVertexOutput;
+    output.position = vec4<f32>(input.position, 0.0, 1.0);
+    output.vertex_color = input.color;
+    return output;
+}
+"#;
+
+const UI_FRAGMENT_SHADER_WGSL: &str = r#"
+@fragment
+fn main(@location(0) vertex_color: vec3<f32>) -> @location(0) vec4<f32> {
+    return vec4<f32>(vertex_color, 1.0);
+}
+"#;
+
+const RIGHT_PANEL_WIDTH_PX: f32 = 220.0;
+const MIN_SCENE_WIDTH_PX: f32 = 320.0;
+const PANEL_MARGIN_PX: f32 = 28.0;
+const SLIDER_TRACK_WIDTH_PX: f32 = 10.0;
+const SLIDER_KNOB_HALF_WIDTH_PX: f32 = 22.0;
+const SLIDER_KNOB_HALF_HEIGHT_PX: f32 = 14.0;
 
 #[derive(Debug)]
 struct ToroidMesh {
-    vertices: Vec<Vertex>,
+    vertices: Vec<SceneVertex>,
     indices: Vec<u32>,
+}
+
+#[derive(Default, Debug, Clone, Copy, Zeroable, Pod)]
+#[repr(C)]
+struct SceneUniformData {
+    mvp: Matrix4,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SliderValue(f32);
+
+impl SliderValue {
+    const MIDPOINT: Self = Self(0.5);
+
+    fn new_clamped(value: f32) -> Self {
+        Self(value.clamp(0.0, 1.0))
+    }
+
+    fn get(self) -> f32 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PositiveFiniteF32(f32);
+
+impl PositiveFiniteF32 {
+    fn new(value: f32) -> Result<Self, DemoConfigError> {
+        if !value.is_finite() || value <= 0.0 {
+            return Err(DemoConfigError::NonPositiveFiniteValue);
+        }
+
+        Ok(Self(value))
+    }
+
+    const fn get(self) -> f32 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ToroidSpec<const MAJOR_SEGMENTS: u32, const MINOR_SEGMENTS: u32> {
+    major_radius: PositiveFiniteF32,
+    minor_radius: PositiveFiniteF32,
+}
+
+impl<const MAJOR_SEGMENTS: u32, const MINOR_SEGMENTS: u32>
+    ToroidSpec<MAJOR_SEGMENTS, MINOR_SEGMENTS>
+{
+    const ASSERT_MAJOR_SEGMENTS: () = assert!(MAJOR_SEGMENTS >= 3);
+    const ASSERT_MINOR_SEGMENTS: () = assert!(MINOR_SEGMENTS >= 3);
+
+    fn new(major_radius: f32, minor_radius: f32) -> Result<Self, DemoConfigError> {
+        let _segment_constraints = (Self::ASSERT_MAJOR_SEGMENTS, Self::ASSERT_MINOR_SEGMENTS);
+
+        let major_radius = PositiveFiniteF32::new(major_radius)?;
+        let minor_radius = PositiveFiniteF32::new(minor_radius)?;
+
+        if major_radius.get() <= minor_radius.get() {
+            return Err(DemoConfigError::MajorRadiusMustExceedMinorRadius);
+        }
+
+        Ok(Self {
+            major_radius,
+            minor_radius,
+        })
+    }
+
+    const fn major_radius(self) -> f32 {
+        self.major_radius.get()
+    }
+
+    const fn minor_radius(self) -> f32 {
+        self.minor_radius.get()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DemoConfigError {
+    NonPositiveFiniteValue,
+    MajorRadiusMustExceedMinorRadius,
+}
+
+impl fmt::Display for DemoConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::NonPositiveFiniteValue => "toroid radii must be finite and strictly positive",
+            Self::MajorRadiusMustExceedMinorRadius => {
+                "major radius must exceed minor radius for this demo toroid"
+            }
+        };
+
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for DemoConfigError {}
+
+#[derive(Debug, Clone, Copy)]
+struct Rect {
+    left: f32,
+    top: f32,
+    right: f32,
+    bottom: f32,
+}
+
+impl Rect {
+    fn width(self) -> f32 {
+        (self.right - self.left).max(0.0)
+    }
+
+    fn height(self) -> f32 {
+        (self.bottom - self.top).max(0.0)
+    }
+
+    fn contains(self, x: f32, y: f32) -> bool {
+        x >= self.left && x <= self.right && y >= self.top && y <= self.bottom
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DemoLayout {
+    scene_viewport: Viewport,
+    ui_viewport: Viewport,
+    panel_rect: Rect,
+    divider_rect: Rect,
+    slider_track_rect: Rect,
+    slider_hit_rect: Rect,
+    slider_knob_rect: Rect,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -77,7 +301,7 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+fn run() -> DemoResult<()> {
     let library = VulkanLibrary::new()?;
     let required_extensions = vulkano_win::required_extensions(&library);
     let instance = Instance::new(
@@ -95,38 +319,72 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let (device, queue) = create_device(surface.clone())?;
     let (mut swapchain, images) = create_swapchain(device.clone(), surface.clone(), queue.clone())?;
+    let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
 
     let depth_format = Format::D16_UNORM;
     let render_pass = create_render_pass(device.clone(), swapchain.image_format(), depth_format)?;
     let (mut framebuffers, mut viewport) =
-        window_size_dependent_setup(device.clone(), &images, render_pass.clone(), depth_format)?;
+        window_size_dependent_setup(memory_allocator.as_ref(), &images, render_pass.clone(), depth_format)?;
+    let (scene_descriptor_set_layout, scene_pipeline_layout) =
+        create_scene_pipeline_layout(device.clone())?;
 
-    let mesh = generate_toroid_mesh(1.4, 0.45, 96, 48)?;
-    let vertex_buffer = CpuAccessibleBuffer::from_iter(
-        device.clone(),
-        BufferUsage::vertex_buffer(),
-        false,
+    let descriptor_set_allocator = StandardDescriptorSetAllocator::new(device.clone());
+    let command_buffer_allocator =
+        StandardCommandBufferAllocator::new(device.clone(), Default::default());
+
+    let mesh = generate_toroid_mesh(ToroidSpec::<96, 48>::new(1.4, 0.45)?);
+    let vertex_buffer = Buffer::from_iter(
+        memory_allocator.as_ref(),
+        BufferCreateInfo {
+            usage: BufferUsage::VERTEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
         mesh.vertices.iter().copied(),
     )?;
-    let index_buffer = CpuAccessibleBuffer::from_iter(
-        device.clone(),
-        BufferUsage::index_buffer(),
-        false,
+    let index_buffer = Buffer::from_iter(
+        memory_allocator.as_ref(),
+        BufferCreateInfo {
+            usage: BufferUsage::INDEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
         mesh.indices.iter().copied(),
     )?;
 
-    let vs = vs::load(device.clone())?;
-    let fs = fs::load(device.clone())?;
-    let pipeline = create_pipeline(device.clone(), render_pass.clone(), vs, fs)?;
-    let uniform_buffer =
-        CpuBufferPool::<vs::ty::Data>::new(device.clone(), BufferUsage::uniform_buffer());
+    let vs = load_wgsl_shader(device.clone(), SCENE_VERTEX_SHADER_WGSL, naga::ShaderStage::Vertex)?;
+    let fs =
+        load_wgsl_shader(device.clone(), SCENE_FRAGMENT_SHADER_WGSL, naga::ShaderStage::Fragment)?;
+    let pipeline = create_pipeline(
+        device.clone(),
+        render_pass.clone(),
+        scene_pipeline_layout.clone(),
+        vs,
+        fs,
+    )?;
+    let ui_vs = load_wgsl_shader(device.clone(), UI_VERTEX_SHADER_WGSL, naga::ShaderStage::Vertex)?;
+    let ui_fs =
+        load_wgsl_shader(device.clone(), UI_FRAGMENT_SHADER_WGSL, naga::ShaderStage::Fragment)?;
+    let ui_pipeline = create_ui_pipeline(device.clone(), render_pass.clone(), ui_vs, ui_fs)?;
     let camera = CameraConfig::default();
 
     let mut recreate_swapchain = false;
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
+    let mut shader_control_value = SliderValue::MIDPOINT;
+    let mut slider_drag_active = false;
+    let mut cursor_position = [0.0_f32, 0.0_f32];
+    let mut needs_redraw = true;
+
+    request_window_redraw(&surface);
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
+        *control_flow = ControlFlow::Wait;
 
         match event {
             Event::WindowEvent {
@@ -140,14 +398,71 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ..
             } => {
                 recreate_swapchain = true;
+                needs_redraw = true;
             }
             Event::WindowEvent {
                 event: WindowEvent::ScaleFactorChanged { .. },
                 ..
             } => {
                 recreate_swapchain = true;
+                needs_redraw = true;
             }
-            Event::RedrawEventsCleared => {
+            Event::WindowEvent {
+                event: WindowEvent::CursorMoved { position, .. },
+                ..
+            } => {
+                cursor_position = [position.x as f32, position.y as f32];
+
+                if slider_drag_active {
+                    if let Some(window_extent) = current_window_extent(&surface) {
+                        let full_viewport = viewport_from_extent(window_extent);
+                        let layout = build_demo_layout(&full_viewport, shader_control_value);
+                        shader_control_value =
+                            slider_value_from_cursor(&layout.slider_track_rect, cursor_position[1]);
+                        needs_redraw = true;
+                    }
+                }
+            }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::MouseInput {
+                        state,
+                        button: MouseButton::Left,
+                        ..
+                    },
+                ..
+            } => {
+                if let Some(window_extent) = current_window_extent(&surface) {
+                    let full_viewport = viewport_from_extent(window_extent);
+                    let layout = build_demo_layout(&full_viewport, shader_control_value);
+
+                    match state {
+                        ElementState::Pressed => {
+                            if layout
+                                .slider_hit_rect
+                                .contains(cursor_position[0], cursor_position[1])
+                            {
+                                slider_drag_active = true;
+                                shader_control_value = slider_value_from_cursor(
+                                    &layout.slider_track_rect,
+                                    cursor_position[1],
+                                );
+                                needs_redraw = true;
+                            }
+                        }
+                        ElementState::Released => {
+                            slider_drag_active = false;
+                            needs_redraw = true;
+                        }
+                    }
+                }
+            }
+            Event::MainEventsCleared => {
+                if needs_redraw {
+                    request_window_redraw(&surface);
+                }
+            }
+            Event::RedrawRequested(_) => {
                 let Some(future) = previous_frame_end.as_mut() else {
                     return;
                 };
@@ -155,6 +470,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
                 if recreate_swapchain {
                     let Some(image_extent) = current_window_extent(&surface) else {
+                        needs_redraw = true;
                         return;
                     };
 
@@ -165,7 +481,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         Ok((new_swapchain, new_images)) => {
                             swapchain = new_swapchain;
                             match window_size_dependent_setup(
-                                device.clone(),
+                                memory_allocator.as_ref(),
                                 &new_images,
                                 render_pass.clone(),
                                 depth_format,
@@ -183,6 +499,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                             recreate_swapchain = false;
+                            needs_redraw = true;
                         }
                         Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
                         Err(error) => {
@@ -198,11 +515,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         Ok(result) => result,
                         Err(AcquireError::OutOfDate) => {
                             recreate_swapchain = true;
+                            needs_redraw = true;
+                            return;
+                        }
+                        Err(AcquireError::Timeout) => {
+                            needs_redraw = true;
                             return;
                         }
                         Err(error) => {
                             eprintln!("Failed to acquire swapchain image: {error}");
-                            *control_flow = ControlFlow::Exit;
+                            needs_redraw = true;
                             return;
                         }
                     };
@@ -211,9 +533,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     recreate_swapchain = true;
                 }
 
-                let mvp = static_demo_mvp(&camera, &viewport);
-                let uniform_data = vs::ty::Data { mvp };
-                let uniform_subbuffer = match uniform_buffer.from_data(uniform_data) {
+                let layout = build_demo_layout(&viewport, shader_control_value);
+                let mvp = static_demo_mvp(&camera, &layout.scene_viewport);
+                let uniform_subbuffer = match Buffer::from_data(
+                    memory_allocator.as_ref(),
+                    BufferCreateInfo {
+                        usage: BufferUsage::UNIFORM_BUFFER,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        usage: MemoryUsage::Upload,
+                        ..Default::default()
+                    },
+                    SceneUniformData { mvp },
+                ) {
                     Ok(buffer) => buffer,
                     Err(error) => {
                         eprintln!("Failed to allocate uniform buffer: {error}");
@@ -222,14 +555,30 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 };
 
-                let layout = pipeline
-                    .layout()
-                    .set_layouts()
-                    .get(0)
-                    .expect("pipeline should expose one descriptor-set layout")
-                    .clone();
+                let ui_vertices = build_ui_vertices(&layout, shader_control_value);
+                let ui_vertex_buffer = match Buffer::from_iter(
+                    memory_allocator.as_ref(),
+                    BufferCreateInfo {
+                        usage: BufferUsage::VERTEX_BUFFER,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        usage: MemoryUsage::Upload,
+                        ..Default::default()
+                    },
+                    ui_vertices,
+                ) {
+                    Ok(buffer) => buffer,
+                    Err(error) => {
+                        eprintln!("Failed to allocate UI vertex buffer: {error}");
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                };
+
                 let descriptor_set = match PersistentDescriptorSet::new(
-                    layout,
+                    &descriptor_set_allocator,
+                    scene_descriptor_set_layout.clone(),
                     [WriteDescriptorSet::buffer(0, uniform_subbuffer)],
                 ) {
                     Ok(set) => set,
@@ -241,7 +590,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 };
 
                 let mut builder = match AutoCommandBufferBuilder::primary(
-                    device.clone(),
+                    &command_buffer_allocator,
                     queue.queue_family_index(),
                     CommandBufferUsage::OneTimeSubmit,
                 ) {
@@ -253,35 +602,52 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 };
 
-                if let Err(error) = builder
-                    .begin_render_pass(
-                        RenderPassBeginInfo {
-                            clear_values: vec![
-                                Some([0.02, 0.02, 0.05, 1.0].into()),
-                                Some(1_f32.into()),
-                            ],
-                            ..RenderPassBeginInfo::framebuffer(
-                                framebuffers[image_index as usize].clone(),
-                            )
-                        },
-                        SubpassContents::Inline,
-                    )
-                    .and_then(|builder| builder.set_viewport(0, [viewport.clone()]))
-                    .and_then(|builder| builder.bind_pipeline_graphics(pipeline.clone()))
-                    .and_then(|builder| {
-                        builder.bind_descriptor_sets(
-                            PipelineBindPoint::Graphics,
-                            pipeline.layout().clone(),
-                            0,
-                            descriptor_set,
-                        )
-                    })
-                    .and_then(|builder| builder.bind_vertex_buffers(0, vertex_buffer.clone()))
-                    .and_then(|builder| builder.bind_index_buffer(index_buffer.clone()))
-                    .and_then(|builder| builder.draw_indexed(index_buffer.len() as u32, 1, 0, 0, 0))
-                    .and_then(|builder| builder.end_render_pass())
-                {
+                if let Err(error) = builder.begin_render_pass(
+                    RenderPassBeginInfo {
+                        clear_values: vec![
+                            Some([0.02, 0.02, 0.05, 1.0].into()),
+                            Some(1_f32.into()),
+                        ],
+                        ..RenderPassBeginInfo::framebuffer(framebuffers[image_index as usize].clone())
+                    },
+                    SubpassContents::Inline,
+                ) {
                     eprintln!("Failed to record command buffer: {error}");
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+
+                builder.set_viewport(0, [layout.scene_viewport.clone()]);
+                builder.bind_pipeline_graphics(pipeline.clone());
+                builder.bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    pipeline.layout().clone(),
+                    0,
+                    descriptor_set,
+                );
+                builder.bind_vertex_buffers(0, vertex_buffer.clone());
+                builder.bind_index_buffer(index_buffer.clone());
+
+                if let Err(error) =
+                    builder.draw_indexed(index_buffer.len() as u32, 1, 0, 0, 0)
+                {
+                    eprintln!("Failed to draw toroid mesh: {error}");
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+
+                builder.set_viewport(0, [layout.ui_viewport.clone()]);
+                builder.bind_pipeline_graphics(ui_pipeline.clone());
+                builder.bind_vertex_buffers(0, ui_vertex_buffer.clone());
+
+                if let Err(error) = builder.draw(ui_vertex_buffer.len() as u32, 1, 0, 0) {
+                    eprintln!("Failed to draw UI overlay: {error}");
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+
+                if let Err(error) = builder.end_render_pass() {
+                    eprintln!("Failed to end render pass: {error}");
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
@@ -313,7 +679,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .then_signal_fence_and_flush(),
                     Err(error) => {
                         eprintln!("Failed to submit draw commands: {error}");
-                        *control_flow = ControlFlow::Exit;
+                        previous_frame_end = Some(sync::now(device.clone()).boxed());
+                        needs_redraw = true;
                         return;
                     }
                 };
@@ -321,14 +688,25 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 match future {
                     Ok(future) => {
                         previous_frame_end = Some(future.boxed());
+                        needs_redraw = false;
                     }
                     Err(FlushError::OutOfDate) => {
                         recreate_swapchain = true;
                         previous_frame_end = Some(sync::now(device.clone()).boxed());
+                        needs_redraw = true;
+                    }
+                    Err(FlushError::Timeout)
+                    | Err(FlushError::AccessError(_))
+                    | Err(FlushError::ResourceAccessError { .. })
+                    | Err(FlushError::ExclusiveAlreadyInUse)
+                    | Err(FlushError::OneTimeSubmitAlreadySubmitted) => {
+                        previous_frame_end = Some(sync::now(device.clone()).boxed());
+                        needs_redraw = true;
                     }
                     Err(error) => {
                         eprintln!("Failed to flush GPU future: {error}");
                         previous_frame_end = Some(sync::now(device.clone()).boxed());
+                        needs_redraw = true;
                     }
                 }
             }
@@ -355,12 +733,14 @@ fn create_device(
                 .iter()
                 .enumerate()
                 .find(|(queue_family_index, queue_family_properties)| {
-                    queue_family_properties.queue_flags.graphics
+                    queue_family_properties
+                        .queue_flags
+                        .intersects(vulkano::device::QueueFlags::GRAPHICS)
                         && device
                             .surface_support(*queue_family_index as u32, &surface)
                             .unwrap_or(false)
                 })
-                .map(|(queue_family_index, _)| (device, queue_family_index as u32))
+                .map(|(queue_family_index, _)| (device.clone(), queue_family_index as u32))
         })
         .min_by_key(|(device, _)| match device.properties().device_type {
             PhysicalDeviceType::DiscreteGpu => 0,
@@ -394,7 +774,7 @@ fn create_swapchain(
     device: Arc<Device>,
     surface: Arc<Surface>,
     queue: Arc<Queue>,
-) -> Result<(Arc<Swapchain>, Vec<Arc<SwapchainImage>>), Box<dyn std::error::Error>> {
+) -> DemoResult<SwapchainBundle> {
     let physical_device = device.physical_device();
     let surface_capabilities =
         physical_device.surface_capabilities(&surface, Default::default())?;
@@ -422,7 +802,7 @@ fn create_swapchain(
             min_image_count,
             image_format,
             image_extent: image_extent.into(),
-            image_usage: vulkano::image::ImageUsage::color_attachment(),
+            image_usage: ImageUsage::COLOR_ATTACHMENT,
             composite_alpha: surface_capabilities
                 .supported_composite_alpha
                 .into_iter()
@@ -441,7 +821,7 @@ fn create_render_pass(
     device: Arc<Device>,
     image_format: Format,
     depth_format: Format,
-) -> Result<Arc<RenderPass>, Box<dyn std::error::Error>> {
+) -> DemoResult<Arc<RenderPass>> {
     Ok(vulkano::single_pass_renderpass!(
         device,
         attachments: {
@@ -465,17 +845,53 @@ fn create_render_pass(
     )?)
 }
 
+fn create_scene_pipeline_layout(
+    device: Arc<Device>,
+) -> DemoResult<(Arc<DescriptorSetLayout>, Arc<PipelineLayout>)> {
+    let descriptor_set_layout = DescriptorSetLayout::new(
+        device.clone(),
+        DescriptorSetLayoutCreateInfo {
+            bindings: [(
+                0,
+                DescriptorSetLayoutBinding {
+                    stages: ShaderStages::all_graphics(),
+                    ..DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer)
+                },
+            )]
+            .into(),
+            ..Default::default()
+        },
+    )?;
+    let pipeline_layout = PipelineLayout::new(
+        device,
+        PipelineLayoutCreateInfo {
+            set_layouts: vec![descriptor_set_layout.clone()],
+            ..Default::default()
+        },
+    )?;
+
+    Ok((descriptor_set_layout, pipeline_layout))
+}
+
 fn create_pipeline(
     device: Arc<Device>,
     render_pass: Arc<RenderPass>,
+    pipeline_layout: Arc<PipelineLayout>,
     vs: Arc<vulkano::shader::ShaderModule>,
     fs: Arc<vulkano::shader::ShaderModule>,
-) -> Result<Arc<GraphicsPipeline>, Box<dyn std::error::Error>> {
-    let subpass = Subpass::from(render_pass, 0)?;
+) -> DemoResult<Arc<GraphicsPipeline>> {
+    let subpass = Subpass::from(render_pass, 0)
+        .ok_or("Render pass does not contain graphics subpass 0.")?;
+    let vs_entry_point = vs
+        .entry_point("main")
+        .ok_or("Scene vertex shader entry point 'main' was not found.")?;
+    let fs_entry_point = fs
+        .entry_point("main")
+        .ok_or("Scene fragment shader entry point 'main' was not found.")?;
 
     Ok(GraphicsPipeline::start()
-        .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
-        .vertex_shader(vs.entry_point("main")?, ())
+        .vertex_input_state(SceneVertex::per_vertex())
+        .vertex_shader(vs_entry_point, ())
         .input_assembly_state(InputAssemblyState::new())
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
         .depth_stencil_state(DepthStencilState::simple_depth_test())
@@ -484,17 +900,43 @@ fn create_pipeline(
                 .cull_mode(CullMode::Back)
                 .front_face(FrontFace::CounterClockwise),
         )
-        .fragment_shader(fs.entry_point("main")?, ())
+        .fragment_shader(fs_entry_point, ())
+        .render_pass(subpass)
+        .with_pipeline_layout(device, pipeline_layout)?)
+}
+
+fn create_ui_pipeline(
+    device: Arc<Device>,
+    render_pass: Arc<RenderPass>,
+    vs: Arc<vulkano::shader::ShaderModule>,
+    fs: Arc<vulkano::shader::ShaderModule>,
+) -> DemoResult<Arc<GraphicsPipeline>> {
+    let subpass = Subpass::from(render_pass, 0)
+        .ok_or("Render pass does not contain UI subpass 0.")?;
+    let vs_entry_point = vs
+        .entry_point("main")
+        .ok_or("UI vertex shader entry point 'main' was not found.")?;
+    let fs_entry_point = fs
+        .entry_point("main")
+        .ok_or("UI fragment shader entry point 'main' was not found.")?;
+
+    Ok(GraphicsPipeline::start()
+        .vertex_input_state(UiVertex::per_vertex())
+        .vertex_shader(vs_entry_point, ())
+        .input_assembly_state(InputAssemblyState::new())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+        .rasterization_state(RasterizationState::new().cull_mode(CullMode::None))
+        .fragment_shader(fs_entry_point, ())
         .render_pass(subpass)
         .build(device)?)
 }
 
 fn window_size_dependent_setup(
-    device: Arc<Device>,
+    memory_allocator: &StandardMemoryAllocator,
     images: &[Arc<SwapchainImage>],
     render_pass: Arc<RenderPass>,
     depth_format: Format,
-) -> Result<(Vec<Arc<Framebuffer>>, Viewport), Box<dyn std::error::Error>> {
+) -> DemoResult<FramebufferBundle> {
     let dimensions = images[0].dimensions().width_height();
     let viewport = Viewport {
         origin: [0.0, 0.0],
@@ -507,7 +949,7 @@ fn window_size_dependent_setup(
         .map(|image| {
             let color_view = ImageView::new_default(image.clone())?;
             let depth_buffer =
-                AttachmentImage::transient(device.clone(), dimensions, depth_format)?;
+                AttachmentImage::transient(memory_allocator, dimensions, depth_format)?;
             let depth_view = ImageView::new_default(depth_buffer)?;
 
             Ok(Framebuffer::new(
@@ -536,25 +978,223 @@ fn current_window_extent(surface: &Arc<Surface>) -> Option<[u32; 2]> {
     }
 }
 
-fn generate_toroid_mesh(
-    major_radius: f32,
-    minor_radius: f32,
-    major_segments: u32,
-    minor_segments: u32,
-) -> Result<ToroidMesh, &'static str> {
-    if !major_radius.is_finite() || !minor_radius.is_finite() {
-        return Err("Toroid radii must be finite.");
+fn request_window_redraw(surface: &Arc<Surface>) {
+    if let Some(window) = surface
+        .object()
+        .and_then(|object| object.downcast_ref::<Window>())
+    {
+        window.request_redraw();
     }
-    if major_radius <= 0.0 || minor_radius <= 0.0 {
-        return Err("Toroid radii must be positive.");
+}
+
+fn viewport_from_extent(extent: [u32; 2]) -> Viewport {
+    Viewport {
+        origin: [0.0, 0.0],
+        dimensions: [extent[0] as f32, extent[1] as f32],
+        depth_range: 0.0..1.0,
     }
-    if major_radius <= minor_radius {
-        return Err("Major radius must exceed minor radius for this demo toroid.");
+}
+
+fn build_demo_layout(full_viewport: &Viewport, slider_value: SliderValue) -> DemoLayout {
+    let full_width = full_viewport.dimensions[0].max(1.0);
+    let full_height = full_viewport.dimensions[1].max(1.0);
+    let max_panel_width = (full_width - MIN_SCENE_WIDTH_PX).max(0.0);
+    let panel_width = if max_panel_width <= 0.0 {
+        0.0
+    } else {
+        RIGHT_PANEL_WIDTH_PX.min(max_panel_width)
+    };
+    let scene_width = (full_width - panel_width).max(1.0);
+    let scene_viewport = Viewport {
+        origin: [0.0, 0.0],
+        dimensions: [scene_width, full_height],
+        depth_range: 0.0..1.0,
+    };
+
+    let panel_rect = Rect {
+        left: scene_width,
+        top: 0.0,
+        right: full_width,
+        bottom: full_height,
+    };
+    let divider_rect = Rect {
+        left: scene_width,
+        top: 0.0,
+        right: (scene_width + 2.0).min(full_width),
+        bottom: full_height,
+    };
+
+    let slider_top = PANEL_MARGIN_PX.min(full_height * 0.25);
+    let slider_bottom = (full_height - PANEL_MARGIN_PX).max(slider_top + 72.0);
+    let slider_center_x = if panel_width > 0.0 {
+        full_width - PANEL_MARGIN_PX - SLIDER_KNOB_HALF_WIDTH_PX
+    } else {
+        full_width - PANEL_MARGIN_PX
+    };
+    let slider_track_rect = if panel_width > 0.0 {
+        Rect {
+            left: slider_center_x - (SLIDER_TRACK_WIDTH_PX * 0.5),
+            top: slider_top,
+            right: slider_center_x + (SLIDER_TRACK_WIDTH_PX * 0.5),
+            bottom: slider_bottom,
+        }
+    } else {
+        Rect {
+            left: 0.0,
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+        }
+    };
+
+    let slider_center_y = slider_center_y(&slider_track_rect, slider_value);
+    let slider_knob_rect = if panel_width > 0.0 {
+        Rect {
+            left: slider_center_x - SLIDER_KNOB_HALF_WIDTH_PX,
+            top: slider_center_y - SLIDER_KNOB_HALF_HEIGHT_PX,
+            right: slider_center_x + SLIDER_KNOB_HALF_WIDTH_PX,
+            bottom: slider_center_y + SLIDER_KNOB_HALF_HEIGHT_PX,
+        }
+    } else {
+        Rect {
+            left: 0.0,
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+        }
+    };
+    let slider_hit_rect = Rect {
+        left: slider_knob_rect.left.min(slider_track_rect.left) - 12.0,
+        top: slider_track_rect.top - 12.0,
+        right: slider_knob_rect.right.max(slider_track_rect.right) + 12.0,
+        bottom: slider_track_rect.bottom + 12.0,
+    };
+
+    DemoLayout {
+        scene_viewport,
+        ui_viewport: full_viewport.clone(),
+        panel_rect,
+        divider_rect,
+        slider_track_rect,
+        slider_hit_rect,
+        slider_knob_rect,
     }
-    if major_segments < 3 || minor_segments < 3 {
-        return Err("Toroid segment counts must both be at least 3.");
+}
+
+fn slider_center_y(track_rect: &Rect, slider_value: SliderValue) -> f32 {
+    track_rect.top + (1.0 - slider_value.get()) * track_rect.height()
+}
+
+fn slider_value_from_cursor(track_rect: &Rect, cursor_y: f32) -> SliderValue {
+    if track_rect.height() <= 0.0 {
+        return SliderValue::MIDPOINT;
     }
 
+    let normalized = ((cursor_y - track_rect.top) / track_rect.height()).clamp(0.0, 1.0);
+    SliderValue::new_clamped(1.0 - normalized)
+}
+
+fn build_ui_vertices(layout: &DemoLayout, slider_value: SliderValue) -> Vec<UiVertex> {
+    let mut vertices = Vec::with_capacity(30);
+
+    push_rect(
+        &mut vertices,
+        &layout.panel_rect,
+        &layout.ui_viewport,
+        [0.05, 0.06, 0.10],
+    );
+    push_rect(
+        &mut vertices,
+        &layout.divider_rect,
+        &layout.ui_viewport,
+        [0.18, 0.22, 0.32],
+    );
+    push_rect(
+        &mut vertices,
+        &layout.slider_track_rect,
+        &layout.ui_viewport,
+        [0.18, 0.21, 0.30],
+    );
+
+    let slider_fill_rect = Rect {
+        left: layout.slider_track_rect.left,
+        top: slider_center_y(&layout.slider_track_rect, slider_value),
+        right: layout.slider_track_rect.right,
+        bottom: layout.slider_track_rect.bottom,
+    };
+    push_rect(
+        &mut vertices,
+        &slider_fill_rect,
+        &layout.ui_viewport,
+        [0.22, 0.58, 0.92],
+    );
+    push_rect(
+        &mut vertices,
+        &layout.slider_knob_rect,
+        &layout.ui_viewport,
+        [0.88, 0.92, 0.98],
+    );
+
+    vertices
+}
+
+fn push_rect(
+    vertices: &mut Vec<UiVertex>,
+    rect: &Rect,
+    viewport: &Viewport,
+    color: [f32; 3],
+) {
+    if rect.width() <= 0.0 || rect.height() <= 0.0 {
+        return;
+    }
+
+    let top_left = pixel_to_ndc(rect.left, rect.top, viewport);
+    let top_right = pixel_to_ndc(rect.right, rect.top, viewport);
+    let bottom_right = pixel_to_ndc(rect.right, rect.bottom, viewport);
+    let bottom_left = pixel_to_ndc(rect.left, rect.bottom, viewport);
+
+    vertices.extend_from_slice(&[
+        UiVertex {
+            position: top_left,
+            color,
+        },
+        UiVertex {
+            position: top_right,
+            color,
+        },
+        UiVertex {
+            position: bottom_right,
+            color,
+        },
+        UiVertex {
+            position: top_left,
+            color,
+        },
+        UiVertex {
+            position: bottom_right,
+            color,
+        },
+        UiVertex {
+            position: bottom_left,
+            color,
+        },
+    ]);
+}
+
+fn pixel_to_ndc(x: f32, y: f32, viewport: &Viewport) -> [f32; 2] {
+    let width = viewport.dimensions[0].max(1.0);
+    let height = viewport.dimensions[1].max(1.0);
+
+    [(x / width) * 2.0 - 1.0, 1.0 - (y / height) * 2.0]
+}
+
+fn generate_toroid_mesh<const MAJOR_SEGMENTS: u32, const MINOR_SEGMENTS: u32>(
+    spec: ToroidSpec<MAJOR_SEGMENTS, MINOR_SEGMENTS>,
+) -> ToroidMesh {
+    let major_radius = spec.major_radius();
+    let minor_radius = spec.minor_radius();
+    let major_segments = MAJOR_SEGMENTS;
+    let minor_segments = MINOR_SEGMENTS;
     let vertex_count = (major_segments * minor_segments) as usize;
     let index_count = (major_segments * minor_segments * 6) as usize;
     let mut vertices = Vec::with_capacity(vertex_count);
@@ -581,7 +1221,7 @@ fn generate_toroid_mesh(
                 0.40 + 0.60 * (0.5 * (normal[2] + 1.0)),
             ];
 
-            vertices.push(Vertex {
+            vertices.push(SceneVertex {
                 position,
                 normal,
                 color,
@@ -610,7 +1250,7 @@ fn generate_toroid_mesh(
         }
     }
 
-    Ok(ToroidMesh { vertices, indices })
+    ToroidMesh { vertices, indices }
 }
 
 fn multiply_matrices(left: Matrix4, right: Matrix4) -> Matrix4 {
@@ -682,59 +1322,43 @@ fn static_demo_mvp(camera: &CameraConfig, viewport: &Viewport) -> Matrix4 {
     multiply_matrices(projection, multiply_matrices(view, model))
 }
 
-mod vs {
-    vulkano_shaders::shader! {
-        ty: "vertex",
-        src: r#"
-            #version 450
+fn load_wgsl_shader(
+    device: Arc<Device>,
+    source: &str,
+    stage: naga::ShaderStage,
+) -> Result<Arc<ShaderModule>, Box<dyn std::error::Error>> {
+    let module = naga::front::wgsl::parse_str(source)?;
+    let module_info = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)?;
+    let words = naga::back::spv::write_vec(
+        &module,
+        &module_info,
+        &naga::back::spv::Options::default(),
+        Some(&naga::back::spv::PipelineOptions {
+            shader_stage: stage,
+            entry_point: "main".into(),
+        }),
+    )?;
 
-            layout(location = 0) in vec3 position;
-            layout(location = 1) in vec3 normal;
-            layout(location = 2) in vec3 color;
-
-            layout(location = 0) out vec3 vertex_color;
-
-            layout(set = 0, binding = 0) uniform Data {
-                mat4 mvp;
-            } uniforms;
-
-            void main() {
-                gl_Position = uniforms.mvp * vec4(position, 1.0);
-
-                vec3 light_direction = normalize(vec3(0.4, 1.0, 0.7));
-                float diffuse = max(dot(normalize(normal), light_direction), 0.2);
-                vertex_color = color * diffuse;
-            }
-        "#
-    }
-}
-
-mod fs {
-    vulkano_shaders::shader! {
-        ty: "fragment",
-        src: r#"
-            #version 450
-
-            layout(location = 0) in vec3 vertex_color;
-            layout(location = 0) out vec4 fragment_color;
-
-            void main() {
-                fragment_color = vec4(vertex_color, 1.0);
-            }
-        "#
-    }
+    Ok(unsafe { ShaderModule::from_words(device, &words)? })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        current_window_extent, generate_toroid_mesh, multiply_matrices, rotation_x,
-        static_demo_mvp, translation, CameraConfig, Viewport,
+        build_demo_layout, build_ui_vertices, generate_toroid_mesh, multiply_matrices,
+        rotation_x, slider_value_from_cursor, static_demo_mvp, translation, viewport_from_extent,
+        CameraConfig, SliderValue, ToroidSpec, Viewport,
     };
 
     #[test]
     fn toroid_mesh_has_expected_vertex_and_index_counts() {
-        let mesh = generate_toroid_mesh(1.2, 0.3, 12, 8).expect("mesh generation should succeed");
+        let mesh = generate_toroid_mesh(
+            ToroidSpec::<12, 8>::new(1.2, 0.3).expect("spec should be valid"),
+        );
 
         assert_eq!(mesh.vertices.len(), 96);
         assert_eq!(mesh.indices.len(), 576);
@@ -742,10 +1366,9 @@ mod tests {
 
     #[test]
     fn toroid_mesh_rejects_invalid_parameters() {
-        assert!(generate_toroid_mesh(0.0, 0.2, 12, 8).is_err());
-        assert!(generate_toroid_mesh(1.0, 1.0, 12, 8).is_err());
-        assert!(generate_toroid_mesh(1.0, 0.2, 2, 8).is_err());
-        assert!(generate_toroid_mesh(f32::NAN, 0.2, 12, 8).is_err());
+        assert!(ToroidSpec::<12, 8>::new(0.0, 0.2).is_err());
+        assert!(ToroidSpec::<12, 8>::new(1.0, 1.0).is_err());
+        assert!(ToroidSpec::<12, 8>::new(f32::NAN, 0.2).is_err());
     }
 
     #[test]
@@ -765,5 +1388,34 @@ mod tests {
         let matrix = static_demo_mvp(&CameraConfig::default(), &viewport);
 
         assert!(matrix.iter().flatten().all(|value| value.is_finite()));
+    }
+
+    #[test]
+    fn demo_layout_reserves_a_right_side_panel_when_space_allows() {
+        let full_viewport = viewport_from_extent([1280, 720]);
+        let layout = build_demo_layout(&full_viewport, SliderValue::MIDPOINT);
+
+        assert!(layout.scene_viewport.dimensions[0] < full_viewport.dimensions[0]);
+        assert!(layout.panel_rect.left >= layout.scene_viewport.dimensions[0]);
+        assert!(layout.slider_track_rect.left >= layout.panel_rect.left);
+    }
+
+    #[test]
+    fn slider_value_from_cursor_clamps_between_zero_and_one() {
+        let full_viewport = viewport_from_extent([1280, 720]);
+        let layout = build_demo_layout(&full_viewport, SliderValue::MIDPOINT);
+
+        assert_eq!(slider_value_from_cursor(&layout.slider_track_rect, -100.0).get(), 1.0);
+        assert_eq!(slider_value_from_cursor(&layout.slider_track_rect, 5_000.0).get(), 0.0);
+    }
+
+    #[test]
+    fn ui_overlay_builds_expected_rectangles() {
+        let full_viewport = viewport_from_extent([1280, 720]);
+        let slider_value = SliderValue::new_clamped(0.65);
+        let layout = build_demo_layout(&full_viewport, slider_value);
+        let vertices = build_ui_vertices(&layout, slider_value);
+
+        assert_eq!(vertices.len(), 30);
     }
 }

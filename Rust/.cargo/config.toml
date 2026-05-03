@@ -1,0 +1,6 @@
+﻿[alias]
+demo = "run --features vulkan-demo --bin toroid_vulkan_demo"
+demo-build = "build --features vulkan-demo --bin toroid_vulkan_demo"
+demo-test = "test --features vulkan-demo --bin toroid_vulkan_demo"
+dev-check = "clippy --all-targets --features vulkan-demo -- -D warnings"
+

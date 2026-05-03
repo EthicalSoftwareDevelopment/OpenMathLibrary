@@ -9,12 +9,13 @@ license = "MIT"
 
 [features]
 default = []
-vulkan-demo = ["dep:vulkano", "dep:vulkano-shaders", "dep:vulkano-win", "dep:winit"]
+vulkan-demo = ["dep:bytemuck", "dep:naga", "dep:vulkano", "dep:vulkano-win", "dep:winit"]
 
 [dependencies]
-vulkano = { version = "0.34", optional = true }
-vulkano-shaders = { version = "0.34", optional = true }
-vulkano-win = { version = "0.34", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+naga = { version = "24", features = ["spv-out", "wgsl-in"], optional = true }
+vulkano = { version = "0.33", optional = true }
+vulkano-win = { version = "0.33", optional = true }
 winit = { version = "0.28", optional = true }
 
 
