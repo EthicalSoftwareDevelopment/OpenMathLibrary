@@ -77,7 +77,8 @@ cargo doc --no-deps
 
 ## Vulkan Toroid Demo
 
-Phase 3 adds an optional demo binary that renders a static toroid with `vulkano`.
+Phase 3 adds an optional demo binary that renders a static toroid with `vulkano` and a right-side
+control panel that contains a draggable slider reserved for future shader controls.
 
 On Windows, make sure Rust can find the MSVC toolchain and Vulkan runtime before building or
 running the demo.
@@ -85,6 +86,22 @@ running the demo.
 ```powershell
 cargo run --features vulkan-demo --bin toroid_vulkan_demo
 ```
+
+For day-to-day development, the repository now includes shorter launch helpers:
+
+- Cargo alias: `cargo demo`
+- Windows launcher: `Run.bat`
+- Linux launcher: `run_demo.sh`
+
+Current demo behavior:
+
+- renders a static toroid in the main scene area,
+- reserves a right-side panel for rendering controls,
+- draws a slider on the far right,
+- and lets you drag that slider with the left mouse button.
+
+At the moment, the slider is intentionally a UI scaffold only. It does not yet modify shader
+behavior; that is planned for Phase 4.
 
 ## Build, Test, and Run
 
@@ -147,11 +164,55 @@ The demo is behind the `vulkan-demo` feature and must be launched explicitly:
 cargo run --features vulkan-demo --bin toroid_vulkan_demo
 ```
 
+You can also use the shorter Cargo alias:
+
+```powershell
+cargo demo
+```
+
+Platform helper scripts:
+
+```powershell
+.\Run.bat
+```
+
+```bash
+chmod +x ./run_demo.sh
+./run_demo.sh
+```
+
+Once the window opens:
+
+1. the toroid is rendered in the main left scene area,
+2. the control panel is shown on the far right,
+3. and the slider can be dragged with the left mouse button.
+
+The slider is currently a placeholder for later shader-flow controls.
+
 > Notes:
 > - Plain `cargo run` is not the correct command for this repository because the only binary target
 >   is `toroid_vulkan_demo`, and it requires the `vulkan-demo` feature.
 > - In the current Windows environment used for verification, building the demo is blocked by the
 >   missing MSVC linker `link.exe`.
+
+### 7. Developer experience shortcuts
+
+To reduce repeated flags while working on the demo, this repository includes Cargo aliases in
+`.cargo/config.toml`:
+
+```powershell
+cargo demo
+cargo demo-build
+cargo demo-test
+cargo dev-check
+```
+
+What they do:
+
+- `cargo demo` runs `toroid_vulkan_demo`
+- `cargo demo-build` builds the demo binary
+- `cargo demo-test` runs the demo's feature-gated test suite
+- `cargo dev-check` runs Clippy with warnings denied for all targets with `vulkan-demo` enabled
 
 ## Running from the IDE Play Button
 
@@ -178,6 +239,16 @@ Equivalent command:
 
 ```powershell
 cargo run --features vulkan-demo --bin toroid_vulkan_demo
+```
+
+If your IDE supports custom Cargo commands or aliases, you can also use:
+
+- **Command**: `demo`
+
+Equivalent terminal command:
+
+```powershell
+cargo demo
 ```
 
 ### JetBrains run configurations for common development tasks
