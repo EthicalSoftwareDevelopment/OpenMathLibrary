@@ -1,6 +1,8 @@
+#[allow(unused_variables, unused_assignments)]
 use std::f32::consts::PI;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Instant;
 
 use bytemuck::{Pod, Zeroable};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -56,6 +58,15 @@ struct SceneVertex {
 struct UiVertex {
     #[format(R32G32_SFLOAT)]
     position: [f32; 2],
+    #[format(R32G32B32_SFLOAT)]
+    color: [f32; 3],
+}
+
+#[derive(Default, Debug, Clone, Copy, Zeroable, Pod, Vertex)]
+#[repr(C)]
+struct ArcVertex {
+    #[format(R32G32B32_SFLOAT)]
+    position: [f32; 3],
     #[format(R32G32B32_SFLOAT)]
     color: [f32; 3],
 }
@@ -140,12 +151,56 @@ fn main(@location(0) vertex_color: vec3<f32>) -> @location(0) vec4<f32> {
 }
 "#;
 
+const ARC_VERTEX_SHADER_WGSL: &str = r#"
+struct SceneUniforms {
+    mvp: mat4x4<f32>,
+    shading: vec4<f32>,
+};
+
+struct ArcVertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) color: vec3<f32>,
+};
+
+struct ArcVertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) vertex_color: vec3<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> uniforms: SceneUniforms;
+
+@vertex
+fn main(input: ArcVertexInput) -> ArcVertexOutput {
+    var output: ArcVertexOutput;
+    output.position = uniforms.mvp * vec4<f32>(input.position, 1.0);
+    output.vertex_color = input.color;
+    return output;
+}
+"#;
+
+const ARC_FRAGMENT_SHADER_WGSL: &str = r#"
+@fragment
+fn main(@location(0) vertex_color: vec3<f32>) -> @location(0) vec4<f32> {
+    return vec4<f32>(vertex_color, 1.0);
+}
+"#;
+
 const RIGHT_PANEL_WIDTH_PX: f32 = 220.0;
 const MIN_SCENE_WIDTH_PX: f32 = 320.0;
 const PANEL_MARGIN_PX: f32 = 28.0;
 const SLIDER_TRACK_WIDTH_PX: f32 = 10.0;
 const SLIDER_KNOB_HALF_WIDTH_PX: f32 = 22.0;
 const SLIDER_KNOB_HALF_HEIGHT_PX: f32 = 14.0;
+const TOROID_MAJOR_RADIUS: f32 = 1.4;
+const TOROID_MINOR_RADIUS: f32 = 0.45;
+const TESLA_COIL_CENTER: [f32; 3] = [2.45, -0.72, 0.0];
+const TESLA_COIL_RADIUS: f32 = 0.24;
+const TESLA_COIL_HEIGHT: f32 = 1.85;
+const TESLA_COIL_TURNS: usize = 7;
+const TESLA_COIL_SEGMENTS_PER_TURN: usize = 24;
+const TESLA_COIL_WIRE_HALF_WIDTH: f32 = 0.045;
+const TESLA_ARC_SEGMENTS: usize = 20;
 
 #[derive(Debug)]
 struct ToroidMesh {
@@ -173,6 +228,12 @@ impl SliderValue {
     fn get(self) -> f32 {
         self.0
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TeslaArcProfile {
+    arc_count: usize,
+    color: [f32; 3],
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -334,8 +395,12 @@ fn run() -> DemoResult<()> {
 
     let depth_format = Format::D16_UNORM;
     let render_pass = create_render_pass(device.clone(), swapchain.image_format(), depth_format)?;
-    let (mut framebuffers, mut viewport) =
-        window_size_dependent_setup(memory_allocator.as_ref(), &images, render_pass.clone(), depth_format)?;
+    let (mut framebuffers, mut viewport) = window_size_dependent_setup(
+        memory_allocator.as_ref(),
+        &images,
+        render_pass.clone(),
+        depth_format,
+    )?;
     let (scene_descriptor_set_layout, scene_pipeline_layout) =
         create_scene_pipeline_layout(device.clone())?;
 
@@ -343,7 +408,10 @@ fn run() -> DemoResult<()> {
     let command_buffer_allocator =
         StandardCommandBufferAllocator::new(device.clone(), Default::default());
 
-    let mesh = generate_toroid_mesh(ToroidSpec::<96, 48>::new(1.4, 0.45)?);
+    let mesh = generate_toroid_mesh(ToroidSpec::<96, 48>::new(
+        TOROID_MAJOR_RADIUS,
+        TOROID_MINOR_RADIUS,
+    )?);
     let vertex_buffer = Buffer::from_iter(
         memory_allocator.as_ref(),
         BufferCreateInfo {
@@ -368,10 +436,42 @@ fn run() -> DemoResult<()> {
         },
         mesh.indices.iter().copied(),
     )?;
+    let coil_mesh = generate_coil_mesh();
+    let coil_vertex_buffer = Buffer::from_iter(
+        memory_allocator.as_ref(),
+        BufferCreateInfo {
+            usage: BufferUsage::VERTEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
+        coil_mesh.vertices.iter().copied(),
+    )?;
+    let coil_index_buffer = Buffer::from_iter(
+        memory_allocator.as_ref(),
+        BufferCreateInfo {
+            usage: BufferUsage::INDEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
+        coil_mesh.indices.iter().copied(),
+    )?;
 
-    let vs = load_wgsl_shader(device.clone(), SCENE_VERTEX_SHADER_WGSL, naga::ShaderStage::Vertex)?;
-    let fs =
-        load_wgsl_shader(device.clone(), SCENE_FRAGMENT_SHADER_WGSL, naga::ShaderStage::Fragment)?;
+    let vs = load_wgsl_shader(
+        device.clone(),
+        SCENE_VERTEX_SHADER_WGSL,
+        naga::ShaderStage::Vertex,
+    )?;
+    let fs = load_wgsl_shader(
+        device.clone(),
+        SCENE_FRAGMENT_SHADER_WGSL,
+        naga::ShaderStage::Fragment,
+    )?;
     let pipeline = create_pipeline(
         device.clone(),
         render_pass.clone(),
@@ -379,11 +479,36 @@ fn run() -> DemoResult<()> {
         vs,
         fs,
     )?;
-    let ui_vs = load_wgsl_shader(device.clone(), UI_VERTEX_SHADER_WGSL, naga::ShaderStage::Vertex)?;
-    let ui_fs =
-        load_wgsl_shader(device.clone(), UI_FRAGMENT_SHADER_WGSL, naga::ShaderStage::Fragment)?;
+    let ui_vs = load_wgsl_shader(
+        device.clone(),
+        UI_VERTEX_SHADER_WGSL,
+        naga::ShaderStage::Vertex,
+    )?;
+    let ui_fs = load_wgsl_shader(
+        device.clone(),
+        UI_FRAGMENT_SHADER_WGSL,
+        naga::ShaderStage::Fragment,
+    )?;
     let ui_pipeline = create_ui_pipeline(device.clone(), render_pass.clone(), ui_vs, ui_fs)?;
+    let arc_vs = load_wgsl_shader(
+        device.clone(),
+        ARC_VERTEX_SHADER_WGSL,
+        naga::ShaderStage::Vertex,
+    )?;
+    let arc_fs = load_wgsl_shader(
+        device.clone(),
+        ARC_FRAGMENT_SHADER_WGSL,
+        naga::ShaderStage::Fragment,
+    )?;
+    let arc_pipeline = create_arc_pipeline(
+        device.clone(),
+        render_pass.clone(),
+        scene_pipeline_layout.clone(),
+        arc_vs,
+        arc_fs,
+    )?;
     let camera = CameraConfig::default();
+    let animation_start = Instant::now();
 
     let mut recreate_swapchain = false;
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -547,6 +672,7 @@ fn run() -> DemoResult<()> {
                 let layout = build_demo_layout(&viewport, shader_control_value);
                 let mvp = static_demo_mvp(&camera, &layout.scene_viewport);
                 let shading = shader_flow_parameters(shader_control_value);
+                let animation_seconds = animation_start.elapsed().as_secs_f32();
                 let uniform_subbuffer = match Buffer::from_data(
                     memory_allocator.as_ref(),
                     BufferCreateInfo {
@@ -588,6 +714,28 @@ fn run() -> DemoResult<()> {
                     }
                 };
 
+                let arc_vertices =
+                    build_tesla_arc_vertices(shader_control_value, animation_seconds);
+                let arc_vertex_buffer = match Buffer::from_iter(
+                    memory_allocator.as_ref(),
+                    BufferCreateInfo {
+                        usage: BufferUsage::VERTEX_BUFFER,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        usage: MemoryUsage::Upload,
+                        ..Default::default()
+                    },
+                    arc_vertices,
+                ) {
+                    Ok(buffer) => buffer,
+                    Err(error) => {
+                        eprintln!("Failed to allocate arc vertex buffer: {error}");
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                };
+
                 let descriptor_set = match PersistentDescriptorSet::new(
                     &descriptor_set_allocator,
                     scene_descriptor_set_layout.clone(),
@@ -620,7 +768,9 @@ fn run() -> DemoResult<()> {
                             Some([0.02, 0.02, 0.05, 1.0].into()),
                             Some(1_f32.into()),
                         ],
-                        ..RenderPassBeginInfo::framebuffer(framebuffers[image_index as usize].clone())
+                        ..RenderPassBeginInfo::framebuffer(
+                            framebuffers[image_index as usize].clone(),
+                        )
                     },
                     SubpassContents::Inline,
                 ) {
@@ -635,15 +785,38 @@ fn run() -> DemoResult<()> {
                     PipelineBindPoint::Graphics,
                     pipeline.layout().clone(),
                     0,
-                    descriptor_set,
+                    descriptor_set.clone(),
                 );
                 builder.bind_vertex_buffers(0, vertex_buffer.clone());
                 builder.bind_index_buffer(index_buffer.clone());
 
-                if let Err(error) =
-                    builder.draw_indexed(index_buffer.len() as u32, 1, 0, 0, 0)
-                {
+                if let Err(error) = builder.draw_indexed(index_buffer.len() as u32, 1, 0, 0, 0) {
                     eprintln!("Failed to draw toroid mesh: {error}");
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+
+                builder.bind_vertex_buffers(0, coil_vertex_buffer.clone());
+                builder.bind_index_buffer(coil_index_buffer.clone());
+
+                if let Err(error) = builder.draw_indexed(coil_index_buffer.len() as u32, 1, 0, 0, 0)
+                {
+                    eprintln!("Failed to draw Tesla coil mesh: {error}");
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+
+                builder.bind_pipeline_graphics(arc_pipeline.clone());
+                builder.bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    arc_pipeline.layout().clone(),
+                    0,
+                    descriptor_set,
+                );
+                builder.bind_vertex_buffers(0, arc_vertex_buffer.clone());
+
+                if let Err(error) = builder.draw(arc_vertex_buffer.len() as u32, 1, 0, 0) {
+                    eprintln!("Failed to draw Tesla arcs: {error}");
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
@@ -700,7 +873,7 @@ fn run() -> DemoResult<()> {
                 match future {
                     Ok(future) => {
                         previous_frame_end = Some(future.boxed());
-                        needs_redraw = false;
+                        needs_redraw = true;
                     }
                     Err(FlushError::OutOfDate) => {
                         recreate_swapchain = true;
@@ -892,8 +1065,8 @@ fn create_pipeline(
     vs: Arc<vulkano::shader::ShaderModule>,
     fs: Arc<vulkano::shader::ShaderModule>,
 ) -> DemoResult<Arc<GraphicsPipeline>> {
-    let subpass = Subpass::from(render_pass, 0)
-        .ok_or("Render pass does not contain graphics subpass 0.")?;
+    let subpass =
+        Subpass::from(render_pass, 0).ok_or("Render pass does not contain graphics subpass 0.")?;
     let vs_entry_point = vs
         .entry_point("main")
         .ok_or("Scene vertex shader entry point 'main' was not found.")?;
@@ -923,8 +1096,8 @@ fn create_ui_pipeline(
     vs: Arc<vulkano::shader::ShaderModule>,
     fs: Arc<vulkano::shader::ShaderModule>,
 ) -> DemoResult<Arc<GraphicsPipeline>> {
-    let subpass = Subpass::from(render_pass, 0)
-        .ok_or("Render pass does not contain UI subpass 0.")?;
+    let subpass =
+        Subpass::from(render_pass, 0).ok_or("Render pass does not contain UI subpass 0.")?;
     let vs_entry_point = vs
         .entry_point("main")
         .ok_or("UI vertex shader entry point 'main' was not found.")?;
@@ -941,6 +1114,33 @@ fn create_ui_pipeline(
         .fragment_shader(fs_entry_point, ())
         .render_pass(subpass)
         .build(device)?)
+}
+
+fn create_arc_pipeline(
+    device: Arc<Device>,
+    render_pass: Arc<RenderPass>,
+    pipeline_layout: Arc<PipelineLayout>,
+    vs: Arc<vulkano::shader::ShaderModule>,
+    fs: Arc<vulkano::shader::ShaderModule>,
+) -> DemoResult<Arc<GraphicsPipeline>> {
+    let subpass =
+        Subpass::from(render_pass, 0).ok_or("Render pass does not contain Tesla arc subpass 0.")?;
+    let vs_entry_point = vs
+        .entry_point("main")
+        .ok_or("Tesla arc vertex shader entry point 'main' was not found.")?;
+    let fs_entry_point = fs
+        .entry_point("main")
+        .ok_or("Tesla arc fragment shader entry point 'main' was not found.")?;
+
+    Ok(GraphicsPipeline::start()
+        .vertex_input_state(ArcVertex::per_vertex())
+        .vertex_shader(vs_entry_point, ())
+        .input_assembly_state(InputAssemblyState::new())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+        .rasterization_state(RasterizationState::new().cull_mode(CullMode::None))
+        .fragment_shader(fs_entry_point, ())
+        .render_pass(subpass)
+        .with_pipeline_layout(device, pipeline_layout)?)
 }
 
 fn window_size_dependent_setup(
@@ -1150,12 +1350,7 @@ fn build_ui_vertices(layout: &DemoLayout, slider_value: SliderValue) -> Vec<UiVe
     vertices
 }
 
-fn push_rect(
-    vertices: &mut Vec<UiVertex>,
-    rect: &Rect,
-    viewport: &Viewport,
-    color: [f32; 3],
-) {
+fn push_rect(vertices: &mut Vec<UiVertex>, rect: &Rect, viewport: &Viewport, color: [f32; 3]) {
     if rect.width() <= 0.0 || rect.height() <= 0.0 {
         return;
     }
@@ -1265,6 +1460,263 @@ fn generate_toroid_mesh<const MAJOR_SEGMENTS: u32, const MINOR_SEGMENTS: u32>(
     ToroidMesh { vertices, indices }
 }
 
+fn generate_coil_mesh() -> ToroidMesh {
+    let sample_count = TESLA_COIL_TURNS * TESLA_COIL_SEGMENTS_PER_TURN + 1;
+    let mut vertices = Vec::with_capacity(sample_count * 2);
+    let mut indices = Vec::with_capacity((sample_count - 1) * 6);
+
+    for sample_index in 0..sample_count {
+        let progress = sample_index as f32 / (sample_count.saturating_sub(1)) as f32;
+        let angle = progress * TESLA_COIL_TURNS as f32 * 2.0 * PI;
+        let (sine, cosine) = angle.sin_cos();
+        let centerline = [
+            TESLA_COIL_CENTER[0] + TESLA_COIL_RADIUS * cosine,
+            TESLA_COIL_CENTER[1] - (TESLA_COIL_HEIGHT * 0.5) + TESLA_COIL_HEIGHT * progress,
+            TESLA_COIL_CENTER[2] + TESLA_COIL_RADIUS * sine,
+        ];
+        let radial = normalize_vec3([cosine, 0.0, sine]);
+        let offset = scale_vec3(radial, TESLA_COIL_WIRE_HALF_WIDTH);
+        let color = [0.80, 0.49, 0.16];
+
+        vertices.push(SceneVertex {
+            position: sub_vec3(centerline, offset),
+            normal: radial,
+            color,
+        });
+        vertices.push(SceneVertex {
+            position: add_vec3(centerline, offset),
+            normal: radial,
+            color,
+        });
+
+        if sample_index + 1 < sample_count {
+            let base = (sample_index * 2) as u32;
+            indices.extend_from_slice(&[base, base + 2, base + 1, base + 1, base + 2, base + 3]);
+        }
+    }
+
+    ToroidMesh { vertices, indices }
+}
+
+fn tesla_arc_profile(slider_value: SliderValue) -> TeslaArcProfile {
+    let control = slider_value.get().clamp(0.0, 1.0);
+
+    if control >= 0.70 {
+        TeslaArcProfile {
+            arc_count: 5,
+            color: [1.0, 0.44, 0.08],
+        }
+    } else if control >= 0.30 {
+        TeslaArcProfile {
+            arc_count: 3,
+            color: [0.04, 0.10, 0.46],
+        }
+    } else {
+        TeslaArcProfile {
+            arc_count: 1,
+            color: [0.02, 0.72, 0.68],
+        }
+    }
+}
+
+fn build_tesla_arc_vertices(slider_value: SliderValue, time_seconds: f32) -> Vec<ArcVertex> {
+    let profile = tesla_arc_profile(slider_value);
+    let control = slider_value.get().clamp(0.0, 1.0);
+    let mut vertices = Vec::with_capacity(profile.arc_count * TESLA_ARC_SEGMENTS * 6);
+
+    for arc_index in 0..profile.arc_count {
+        let spread = if profile.arc_count == 1 {
+            0.5
+        } else {
+            arc_index as f32 / (profile.arc_count - 1) as f32
+        };
+        let major_theta =
+            (spread - 0.5) * 0.82 + 0.05 * (time_seconds * 1.6 + arc_index as f32 * 0.9).sin();
+        let minor_theta = 0.18 * PI + 0.08 * (time_seconds * 2.1 + arc_index as f32 * 0.7).cos();
+        let start = toroid_surface_point(major_theta, minor_theta);
+
+        let end_angle = -0.55 + (spread - 0.5) * 1.15;
+        let end = [
+            TESLA_COIL_CENTER[0] + TESLA_COIL_RADIUS * end_angle.cos(),
+            TESLA_COIL_CENTER[1] + TESLA_COIL_HEIGHT * 0.5 - 0.08 + 0.12 * (spread - 0.5),
+            TESLA_COIL_CENTER[2] + TESLA_COIL_RADIUS * end_angle.sin(),
+        ];
+
+        let direction = normalize_vec3(sub_vec3(end, start));
+        let (side, up) = perpendicular_basis(direction);
+        let amplitude = 0.09 + 0.15 * control + arc_index as f32 * 0.01;
+        let ribbon_width = 0.022 + 0.010 * control;
+        let mut points = Vec::with_capacity(TESLA_ARC_SEGMENTS + 1);
+
+        for segment_index in 0..=TESLA_ARC_SEGMENTS {
+            let progress = segment_index as f32 / TESLA_ARC_SEGMENTS as f32;
+            let base_position = lerp_vec3(start, end, progress);
+            let envelope = (progress * PI).sin().max(0.0).powf(0.82);
+            let primary_wave =
+                (progress * 7.0 * PI + time_seconds * 8.2 + arc_index as f32 * 1.3).sin();
+            let secondary_wave =
+                (progress * 11.0 * PI - time_seconds * 6.4 + arc_index as f32 * 0.8).cos();
+            let displacement = add_vec3(
+                scale_vec3(side, primary_wave * amplitude * envelope),
+                scale_vec3(up, secondary_wave * amplitude * 0.42 * envelope),
+            );
+            let longitudinal = scale_vec3(
+                direction,
+                secondary_wave * (0.01 + 0.01 * control) * envelope,
+            );
+
+            points.push(add_vec3(
+                base_position,
+                add_vec3(displacement, longitudinal),
+            ));
+        }
+
+        append_arc_strip(&mut vertices, &points, ribbon_width, profile.color);
+    }
+
+    vertices
+}
+
+fn append_arc_strip(
+    vertices: &mut Vec<ArcVertex>,
+    points: &[[f32; 3]],
+    ribbon_width: f32,
+    color: [f32; 3],
+) {
+    if points.len() < 2 {
+        return;
+    }
+
+    let segment_count = (points.len() - 1) as f32;
+
+    for segment_index in 0..(points.len() - 1) {
+        let start = points[segment_index];
+        let end = points[segment_index + 1];
+        let progress_start = segment_index as f32 / segment_count;
+        let progress_end = (segment_index + 1) as f32 / segment_count;
+        let direction = normalize_vec3(sub_vec3(end, start));
+        let offset_direction = arc_ribbon_offset(direction);
+        let start_offset = scale_vec3(
+            offset_direction,
+            ribbon_width * arc_ribbon_scale(progress_start),
+        );
+        let end_offset = scale_vec3(
+            offset_direction,
+            ribbon_width * arc_ribbon_scale(progress_end),
+        );
+        let start_left = sub_vec3(start, start_offset);
+        let start_right = add_vec3(start, start_offset);
+        let end_left = sub_vec3(end, end_offset);
+        let end_right = add_vec3(end, end_offset);
+
+        vertices.extend_from_slice(&[
+            ArcVertex {
+                position: start_left,
+                color,
+            },
+            ArcVertex {
+                position: start_right,
+                color,
+            },
+            ArcVertex {
+                position: end_right,
+                color,
+            },
+            ArcVertex {
+                position: start_left,
+                color,
+            },
+            ArcVertex {
+                position: end_right,
+                color,
+            },
+            ArcVertex {
+                position: end_left,
+                color,
+            },
+        ]);
+    }
+}
+
+fn toroid_surface_point(major_theta: f32, minor_theta: f32) -> [f32; 3] {
+    let (major_sin, major_cos) = major_theta.sin_cos();
+    let (minor_sin, minor_cos) = minor_theta.sin_cos();
+    let ring_radius = TOROID_MAJOR_RADIUS + TOROID_MINOR_RADIUS * minor_cos;
+
+    [
+        ring_radius * major_cos,
+        TOROID_MINOR_RADIUS * minor_sin,
+        ring_radius * major_sin,
+    ]
+}
+
+fn add_vec3(left: [f32; 3], right: [f32; 3]) -> [f32; 3] {
+    [left[0] + right[0], left[1] + right[1], left[2] + right[2]]
+}
+
+fn sub_vec3(left: [f32; 3], right: [f32; 3]) -> [f32; 3] {
+    [left[0] - right[0], left[1] - right[1], left[2] - right[2]]
+}
+
+fn scale_vec3(vector: [f32; 3], scalar: f32) -> [f32; 3] {
+    [vector[0] * scalar, vector[1] * scalar, vector[2] * scalar]
+}
+
+fn dot_vec3(left: [f32; 3], right: [f32; 3]) -> f32 {
+    left[0] * right[0] + left[1] * right[1] + left[2] * right[2]
+}
+
+fn cross_vec3(left: [f32; 3], right: [f32; 3]) -> [f32; 3] {
+    [
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    ]
+}
+
+fn length_vec3(vector: [f32; 3]) -> f32 {
+    dot_vec3(vector, vector).sqrt()
+}
+
+fn normalize_vec3(vector: [f32; 3]) -> [f32; 3] {
+    let length = length_vec3(vector);
+
+    if !length.is_finite() || length <= 1e-6 {
+        [0.0, 1.0, 0.0]
+    } else {
+        scale_vec3(vector, 1.0 / length)
+    }
+}
+
+fn lerp_vec3(start: [f32; 3], end: [f32; 3], t: f32) -> [f32; 3] {
+    add_vec3(scale_vec3(start, 1.0 - t), scale_vec3(end, t))
+}
+
+fn perpendicular_basis(direction: [f32; 3]) -> ([f32; 3], [f32; 3]) {
+    let mut side = cross_vec3(direction, [0.0, 1.0, 0.0]);
+    if length_vec3(side) <= 1e-5 {
+        side = cross_vec3(direction, [0.0, 0.0, 1.0]);
+    }
+
+    let side = normalize_vec3(side);
+    let up = normalize_vec3(cross_vec3(side, direction));
+
+    (side, up)
+}
+
+fn arc_ribbon_offset(direction: [f32; 3]) -> [f32; 3] {
+    let mut offset = cross_vec3(direction, [0.35, 1.0, 0.55]);
+    if length_vec3(offset) <= 1e-5 {
+        offset = cross_vec3(direction, [0.0, 0.0, 1.0]);
+    }
+
+    normalize_vec3(offset)
+}
+
+fn arc_ribbon_scale(progress: f32) -> f32 {
+    0.62 + 0.48 * (progress * PI).sin().max(0.0).powf(0.75)
+}
+
 fn multiply_matrices(left: Matrix4, right: Matrix4) -> Matrix4 {
     let mut result = [[0.0; 4]; 4];
 
@@ -1371,16 +1823,16 @@ fn load_wgsl_shader(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_demo_layout, build_ui_vertices, generate_toroid_mesh, multiply_matrices,
-        rotation_x, shader_flow_parameters, slider_value_from_cursor, static_demo_mvp,
-        translation, viewport_from_extent, CameraConfig, SliderValue, ToroidSpec, Viewport,
+        build_demo_layout, build_tesla_arc_vertices, build_ui_vertices, generate_coil_mesh,
+        generate_toroid_mesh, multiply_matrices, rotation_x, shader_flow_parameters,
+        slider_value_from_cursor, static_demo_mvp, tesla_arc_profile, translation,
+        viewport_from_extent, CameraConfig, SliderValue, ToroidSpec, Viewport, TESLA_ARC_SEGMENTS,
     };
 
     #[test]
     fn toroid_mesh_has_expected_vertex_and_index_counts() {
-        let mesh = generate_toroid_mesh(
-            ToroidSpec::<12, 8>::new(1.2, 0.3).expect("spec should be valid"),
-        );
+        let mesh =
+            generate_toroid_mesh(ToroidSpec::<12, 8>::new(1.2, 0.3).expect("spec should be valid"));
 
         assert_eq!(mesh.vertices.len(), 96);
         assert_eq!(mesh.indices.len(), 576);
@@ -1427,8 +1879,14 @@ mod tests {
         let full_viewport = viewport_from_extent([1280, 720]);
         let layout = build_demo_layout(&full_viewport, SliderValue::MIDPOINT);
 
-        assert_eq!(slider_value_from_cursor(&layout.slider_track_rect, -100.0).get(), 1.0);
-        assert_eq!(slider_value_from_cursor(&layout.slider_track_rect, 5_000.0).get(), 0.0);
+        assert_eq!(
+            slider_value_from_cursor(&layout.slider_track_rect, -100.0).get(),
+            1.0
+        );
+        assert_eq!(
+            slider_value_from_cursor(&layout.slider_track_rect, 5_000.0).get(),
+            0.0
+        );
     }
 
     #[test]
@@ -1452,5 +1910,46 @@ mod tests {
         assert!(high.iter().all(|value| value.is_finite()));
         assert!(high[1] < low[1]);
         assert!(high[2] > low[2]);
+    }
+
+    #[test]
+    fn tesla_arc_profile_switches_count_and_color_by_slider_band() {
+        let low = tesla_arc_profile(SliderValue::new_clamped(0.10));
+        let medium = tesla_arc_profile(SliderValue::new_clamped(0.30));
+        let high = tesla_arc_profile(SliderValue::new_clamped(0.70));
+
+        assert_eq!(low.arc_count, 1);
+        assert_eq!(low.color, [0.02, 0.72, 0.68]);
+        assert_eq!(medium.arc_count, 3);
+        assert_eq!(medium.color, [0.04, 0.10, 0.46]);
+        assert_eq!(high.arc_count, 5);
+        assert_eq!(high.color, [1.0, 0.44, 0.08]);
+    }
+
+    #[test]
+    fn tesla_arc_vertices_are_finite_and_scale_with_arc_count() {
+        let low = build_tesla_arc_vertices(SliderValue::new_clamped(0.15), 0.0);
+        let medium = build_tesla_arc_vertices(SliderValue::new_clamped(0.55), 0.5);
+        let high = build_tesla_arc_vertices(SliderValue::new_clamped(0.95), 1.0);
+
+        assert_eq!(low.len(), TESLA_ARC_SEGMENTS * 6);
+        assert_eq!(medium.len(), 3 * TESLA_ARC_SEGMENTS * 6);
+        assert_eq!(high.len(), 5 * TESLA_ARC_SEGMENTS * 6);
+        assert!(high.iter().all(|vertex| {
+            vertex.position.iter().all(|value| value.is_finite())
+                && vertex.color.iter().all(|value| value.is_finite())
+        }));
+    }
+
+    #[test]
+    fn coil_mesh_contains_indexed_geometry_with_finite_vertices() {
+        let mesh = generate_coil_mesh();
+
+        assert!(!mesh.vertices.is_empty());
+        assert!(!mesh.indices.is_empty());
+        assert!(mesh
+            .vertices
+            .iter()
+            .all(|vertex| vertex.position.iter().all(|value| value.is_finite())));
     }
 }
