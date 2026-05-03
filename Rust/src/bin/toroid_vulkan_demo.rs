@@ -203,6 +203,18 @@ const TESLA_COIL_WIRE_HALF_WIDTH: f32 = 0.045;
 const TESLA_ARC_SEGMENTS: usize = 20;
 const TESLA_ARC_LENGTH_MULTIPLIER: f32 = 3.0;
 const TESLA_ARC_LENGTH_SEARCH_STEPS: usize = 8;
+const EMF_FIELD_TOROID_ORBIT_COUNT: usize = 6;
+const EMF_FIELD_COIL_ORBIT_COUNT: usize = 4;
+const EMF_FIELD_SEGMENTS: usize = 36;
+const EMF_FIELD_RIBBON_WIDTH: f32 = 0.0065;
+const EMF_FIELD_COLOR: [f32; 3] = [0.62, 0.64, 0.68];
+const EMF_FIELD_ELECTRIC_X_SAMPLES: [f32; 3] = [-0.85, 0.0, 0.85];
+const EMF_FIELD_ELECTRIC_Y_SAMPLES: [f32; 3] = [-0.65, 0.0, 0.65];
+const EMF_FIELD_ELECTRIC_Z_SAMPLES: [f32; 3] = [-0.65, 0.0, 0.65];
+const EMF_FIELD_MAGNETIC_ORBIT_COUNT: usize = EMF_FIELD_TOROID_ORBIT_COUNT + EMF_FIELD_COIL_ORBIT_COUNT;
+const EMF_FIELD_MAGNETIC_SEGMENTS: usize = EMF_FIELD_SEGMENTS;
+const EMF_FIELD_ELECTRIC_COLOR: [f32; 3] = [0.18, 0.70, 0.98];
+const EMF_FIELD_MAGNETIC_COLOR: [f32; 3] = [0.98, 0.42, 0.22];
 
 #[derive(Debug)]
 struct ToroidMesh {
@@ -502,6 +514,13 @@ fn run() -> DemoResult<()> {
         ARC_FRAGMENT_SHADER_WGSL,
         naga::ShaderStage::Fragment,
     )?;
+    let emf_pipeline = create_emf_pipeline(
+        device.clone(),
+        render_pass.clone(),
+        scene_pipeline_layout.clone(),
+        arc_vs.clone(),
+        arc_fs.clone(),
+    )?;
     let arc_pipeline = create_arc_pipeline(
         device.clone(),
         render_pass.clone(),
@@ -741,6 +760,28 @@ fn run() -> DemoResult<()> {
                     }
                 };
 
+                let emf_vertices =
+                    build_emf_field_vertices(shader_control_value, animation_seconds);
+                let emf_vertex_buffer = match Buffer::from_iter(
+                    memory_allocator.as_ref(),
+                    BufferCreateInfo {
+                        usage: BufferUsage::VERTEX_BUFFER,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        usage: MemoryUsage::Upload,
+                        ..Default::default()
+                    },
+                    emf_vertices,
+                ) {
+                    Ok(buffer) => buffer,
+                    Err(error) => {
+                        eprintln!("Failed to allocate EMF vertex buffer: {error}");
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                };
+
                 let descriptor_set = match PersistentDescriptorSet::new(
                     &descriptor_set_allocator,
                     scene_descriptor_set_layout.clone(),
@@ -807,6 +848,21 @@ fn run() -> DemoResult<()> {
                 if let Err(error) = builder.draw_indexed(coil_index_buffer.len() as u32, 1, 0, 0, 0)
                 {
                     eprintln!("Failed to draw Tesla coil mesh: {error}");
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+
+                builder.bind_pipeline_graphics(emf_pipeline.clone());
+                builder.bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    emf_pipeline.layout().clone(),
+                    0,
+                    descriptor_set.clone(),
+                );
+                builder.bind_vertex_buffers(0, emf_vertex_buffer.clone());
+
+                if let Err(error) = builder.draw(emf_vertex_buffer.len() as u32, 1, 0, 0) {
+                    eprintln!("Failed to draw EMF field orbits: {error}");
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
@@ -1137,6 +1193,34 @@ fn create_arc_pipeline(
         .vertex_shader(vs_entry_point, ())
         .input_assembly_state(InputAssemblyState::new())
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+        .rasterization_state(RasterizationState::new().cull_mode(CullMode::None))
+        .fragment_shader(fs_entry_point, ())
+        .render_pass(subpass)
+        .with_pipeline_layout(device, pipeline_layout)?)
+}
+
+fn create_emf_pipeline(
+    device: Arc<Device>,
+    render_pass: Arc<RenderPass>,
+    pipeline_layout: Arc<PipelineLayout>,
+    vs: Arc<vulkano::shader::ShaderModule>,
+    fs: Arc<vulkano::shader::ShaderModule>,
+) -> DemoResult<Arc<GraphicsPipeline>> {
+    let subpass =
+        Subpass::from(render_pass, 0).ok_or("Render pass does not contain EMF field subpass 0.")?;
+    let vs_entry_point = vs
+        .entry_point("main")
+        .ok_or("EMF field vertex shader entry point 'main' was not found.")?;
+    let fs_entry_point = fs
+        .entry_point("main")
+        .ok_or("EMF field fragment shader entry point 'main' was not found.")?;
+
+    Ok(GraphicsPipeline::start()
+        .vertex_input_state(ArcVertex::per_vertex())
+        .vertex_shader(vs_entry_point, ())
+        .input_assembly_state(InputAssemblyState::new())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+        .depth_stencil_state(DepthStencilState::simple_depth_test())
         .rasterization_state(RasterizationState::new().cull_mode(CullMode::None))
         .fragment_shader(fs_entry_point, ())
         .render_pass(subpass)
@@ -1534,26 +1618,15 @@ fn build_tesla_arc_vertices(slider_value: SliderValue, time_seconds: f32) -> Vec
             (spread - 0.5) * 0.82 + 0.05 * (time_seconds * 1.6 + arc_index as f32 * 0.9).sin();
         let minor_theta = 0.18 * PI + 0.08 * (time_seconds * 2.1 + arc_index as f32 * 0.7).cos();
         let start = toroid_surface_point(major_theta, minor_theta);
-
-        let end_angle = -0.55 + (spread - 0.5) * 1.15;
-        let end = [
-            TESLA_COIL_CENTER[0] + TESLA_COIL_RADIUS * end_angle.cos(),
-            TESLA_COIL_CENTER[1] + TESLA_COIL_HEIGHT * 0.5 - 0.08 + 0.12 * (spread - 0.5),
-            TESLA_COIL_CENTER[2] + TESLA_COIL_RADIUS * end_angle.sin(),
-        ];
-
-        let base_span = sub_vec3(end, start);
-        let base_distance = length_vec3(base_span).max(1e-4);
-        let direction = normalize_vec3(base_span);
+        let direction = toroid_surface_normal(major_theta, minor_theta);
         let (side, up) = perpendicular_basis(direction);
-        let ribbon_width = 0.022 + 0.010 * control;
+        let ribbon_width = 0.018 + 0.006 * control;
         let points = build_tesla_arc_points(
             start,
-            end,
+            direction,
             side,
             up,
-            direction,
-            base_distance,
+            TOROID_MAJOR_RADIUS,
             control,
             time_seconds,
             arc_index,
@@ -1567,101 +1640,30 @@ fn build_tesla_arc_vertices(slider_value: SliderValue, time_seconds: f32) -> Vec
 
 fn build_tesla_arc_points(
     start: [f32; 3],
-    end: [f32; 3],
+    direction: [f32; 3],
     side: [f32; 3],
     up: [f32; 3],
-    direction: [f32; 3],
-    base_distance: f32,
+    target_length: f32,
     control: f32,
     time_seconds: f32,
     arc_index: usize,
 ) -> Vec<[f32; 3]> {
-    let base_amplitude = 0.09 + 0.15 * control + arc_index as f32 * 0.01;
-    let target_length = base_distance * TESLA_ARC_LENGTH_MULTIPLIER;
-    let mut low = base_amplitude;
-    let mut high = (base_distance * (1.15 + 0.35 * control)).max(base_amplitude);
-    let mut best_points = tesla_arc_points_with_amplitude(
-        start,
-        end,
-        side,
-        up,
-        direction,
-        control,
-        time_seconds,
-        arc_index,
-        high,
-    );
-
-    while polyline_length(&best_points) < target_length && high < base_distance * 32.0 {
-        low = high;
-        high *= 1.6;
-        best_points = tesla_arc_points_with_amplitude(
-            start,
-            end,
-            side,
-            up,
-            direction,
-            control,
-            time_seconds,
-            arc_index,
-            high,
-        );
-    }
-
-    for _ in 0..TESLA_ARC_LENGTH_SEARCH_STEPS {
-        let mid = 0.5 * (low + high);
-        let candidate = tesla_arc_points_with_amplitude(
-            start,
-            end,
-            side,
-            up,
-            direction,
-            control,
-            time_seconds,
-            arc_index,
-            mid,
-        );
-
-        if polyline_length(&candidate) < target_length {
-            low = mid;
-        } else {
-            high = mid;
-            best_points = candidate;
-        }
-    }
-
-    best_points
-}
-
-fn tesla_arc_points_with_amplitude(
-    start: [f32; 3],
-    end: [f32; 3],
-    side: [f32; 3],
-    up: [f32; 3],
-    direction: [f32; 3],
-    control: f32,
-    time_seconds: f32,
-    arc_index: usize,
-    amplitude: f32,
-) -> Vec<[f32; 3]> {
+    let amplitude = 0.045 + 0.03 * control + arc_index as f32 * 0.004;
     let mut points = Vec::with_capacity(TESLA_ARC_SEGMENTS + 1);
 
     for segment_index in 0..=TESLA_ARC_SEGMENTS {
         let progress = segment_index as f32 / TESLA_ARC_SEGMENTS as f32;
-        let base_position = lerp_vec3(start, end, progress);
-        let envelope = (progress * PI).sin().max(0.0).powf(0.82);
+        let base_position = add_vec3(start, scale_vec3(direction, progress * target_length));
+        let envelope = (progress * PI).sin().max(0.0).powf(0.85);
         let primary_wave =
-            (progress * 7.0 * PI + time_seconds * 8.2 + arc_index as f32 * 1.3).sin();
+            (progress * 5.0 * PI + time_seconds * 5.6 + arc_index as f32 * 1.05).sin();
         let secondary_wave =
-            (progress * 11.0 * PI - time_seconds * 6.4 + arc_index as f32 * 0.8).cos();
+            (progress * 9.0 * PI - time_seconds * 4.3 + arc_index as f32 * 0.6).cos();
         let displacement = add_vec3(
             scale_vec3(side, primary_wave * amplitude * envelope),
-            scale_vec3(up, secondary_wave * amplitude * 0.42 * envelope),
+            scale_vec3(up, secondary_wave * amplitude * 0.55 * envelope),
         );
-        let longitudinal = scale_vec3(
-            direction,
-            secondary_wave * (0.01 + 0.01 * control) * envelope,
-        );
+        let longitudinal = scale_vec3(direction, secondary_wave * amplitude * 0.08 * envelope);
 
         points.push(add_vec3(
             base_position,
@@ -1672,11 +1674,147 @@ fn tesla_arc_points_with_amplitude(
     points
 }
 
-fn polyline_length(points: &[[f32; 3]]) -> f32 {
+fn build_emf_field_vertices(slider_value: SliderValue, time_seconds: f32) -> Vec<ArcVertex> {
+    let (charge_position, charge_strength) = field_charge_state(slider_value, time_seconds);
+    let mut vertices = Vec::new();
+
+    append_electric_field_vertices(
+        &mut vertices,
+        charge_position,
+        charge_strength,
+        time_seconds,
+    );
+    append_magnetic_field_vertices(
+        &mut vertices,
+        charge_position,
+        charge_strength,
+        time_seconds,
+    );
+
+    vertices
+}
+
+fn field_charge_state(slider_value: SliderValue, time_seconds: f32) -> ([f32; 3], f32) {
+    let control = slider_value.get().clamp(0.0, 1.0);
+    let strength = (control * 2.0) - 1.0;
+    let position = [
+        (control - 0.5) * 1.05,
+        0.14 * (time_seconds * 0.85).sin(),
+        0.18 * (time_seconds * 0.55).cos(),
+    ];
+
+    (position, strength)
+}
+
+fn append_electric_field_vertices(
+    vertices: &mut Vec<ArcVertex>,
+    charge_position: [f32; 3],
+    charge_strength: f32,
+    time_seconds: f32,
+) {
+    let scale = 0.34 + 0.18 * charge_strength.abs();
+
+    for &x in &EMF_FIELD_ELECTRIC_X_SAMPLES {
+        for &y in &EMF_FIELD_ELECTRIC_Y_SAMPLES {
+            for &z in &EMF_FIELD_ELECTRIC_Z_SAMPLES {
+                let sample = [x, y, z];
+                let vector = electric_field_vector(sample, charge_position, charge_strength);
+                let points = field_vector_points(sample, vector, scale, time_seconds, 0);
+                append_arc_strip(
+                    vertices,
+                    &points,
+                    EMF_FIELD_RIBBON_WIDTH,
+                    EMF_FIELD_ELECTRIC_COLOR,
+                );
+            }
+        }
+    }
+}
+
+fn append_magnetic_field_vertices(
+    vertices: &mut Vec<ArcVertex>,
+    charge_position: [f32; 3],
+    charge_strength: f32,
+    time_seconds: f32,
+) {
+    let orbit_radius_base = 0.34 + 0.14 * charge_strength.abs();
+
+    for orbit_index in 0..EMF_FIELD_MAGNETIC_ORBIT_COUNT {
+        let points = magnetic_field_orbit_points(
+            orbit_index,
+            charge_position,
+            orbit_radius_base,
+            time_seconds,
+            charge_strength,
+        );
+        append_arc_strip(
+            vertices,
+            &points,
+            EMF_FIELD_RIBBON_WIDTH,
+            EMF_FIELD_MAGNETIC_COLOR,
+        );
+    }
+}
+
+fn field_vector_points(
+    start: [f32; 3],
+    vector: [f32; 3],
+    scale: f32,
+    time_seconds: f32,
+    seed: usize,
+) -> Vec<[f32; 3]> {
+    let direction = normalize_vec3(vector);
+    let length = (length_vec3(vector) * scale).clamp(0.10, 0.50);
+    let (side, _up) = perpendicular_basis(direction);
+    let mid = add_vec3(
+        add_vec3(start, scale_vec3(direction, length * 0.5)),
+        scale_vec3(side, 0.02 * (time_seconds * 1.7 + seed as f32 * 0.31).sin()),
+    );
+    let end = add_vec3(start, scale_vec3(direction, length));
+
+    vec![start, mid, end]
+}
+
+fn electric_field_vector(
+    sample: [f32; 3],
+    charge_position: [f32; 3],
+    charge_strength: f32,
+) -> [f32; 3] {
+    let delta = sub_vec3(sample, charge_position);
+    let distance_sq = dot_vec3(delta, delta).max(0.18);
+    let distance = distance_sq.sqrt();
+    let scale = charge_strength / (distance_sq * distance);
+
+    scale_vec3(delta, scale)
+}
+
+fn magnetic_field_orbit_points(
+    orbit_index: usize,
+    charge_position: [f32; 3],
+    orbit_radius_base: f32,
+    time_seconds: f32,
+    charge_strength: f32,
+) -> Vec<[f32; 3]> {
+    let orbit_phase = orbit_index as f32 / EMF_FIELD_MAGNETIC_ORBIT_COUNT as f32 * 2.0 * PI;
+    let radius = orbit_radius_base + 0.08 * orbit_index as f32;
+    let vertical_span = 1.25 + 0.10 * charge_strength.abs();
+    let mut points = Vec::with_capacity(EMF_FIELD_MAGNETIC_SEGMENTS + 1);
+
+    for segment_index in 0..=EMF_FIELD_MAGNETIC_SEGMENTS {
+        let progress = segment_index as f32 / EMF_FIELD_MAGNETIC_SEGMENTS as f32;
+        let angle = progress * 2.0 * PI + orbit_phase + time_seconds * 0.75;
+        let swirl = 0.03 * (progress * 6.0 * PI + time_seconds * 1.4 + orbit_phase).sin();
+        let radial = radius + swirl;
+        let x = charge_position[0] + radial * angle.cos();
+        let z = charge_position[2] + radial * angle.sin();
+        let y = charge_position[1] - (vertical_span * 0.5)
+            + progress * vertical_span
+            + 0.05 * (angle + time_seconds).sin();
+
+        points.push([x, y, z]);
+    }
+
     points
-        .windows(2)
-        .map(|segment| length_vec3(sub_vec3(segment[1], segment[0])))
-        .sum()
 }
 
 fn append_arc_strip(
@@ -1752,6 +1890,16 @@ fn toroid_surface_point(major_theta: f32, minor_theta: f32) -> [f32; 3] {
     ]
 }
 
+fn toroid_surface_normal(major_theta: f32, minor_theta: f32) -> [f32; 3] {
+    let (major_sin, major_cos) = major_theta.sin_cos();
+    let (minor_sin, minor_cos) = minor_theta.sin_cos();
+    let x = -TOROID_MINOR_RADIUS * major_sin * minor_cos;
+    let y = minor_sin;
+    let z = -TOROID_MINOR_RADIUS * major_cos * minor_cos;
+
+    normalize_vec3([x, y, z])
+}
+
 fn add_vec3(left: [f32; 3], right: [f32; 3]) -> [f32; 3] {
     [left[0] + right[0], left[1] + right[1], left[2] + right[2]]
 }
@@ -1778,6 +1926,13 @@ fn cross_vec3(left: [f32; 3], right: [f32; 3]) -> [f32; 3] {
 
 fn length_vec3(vector: [f32; 3]) -> f32 {
     dot_vec3(vector, vector).sqrt()
+}
+
+fn polyline_length(points: &[[f32; 3]]) -> f32 {
+    points
+        .windows(2)
+        .map(|segment| length_vec3(sub_vec3(segment[1], segment[0])))
+        .sum()
 }
 
 fn normalize_vec3(vector: [f32; 3]) -> [f32; 3] {
@@ -1927,13 +2082,15 @@ mod tests {
     use std::f32::consts::PI;
 
     use super::{
-        build_demo_layout, build_tesla_arc_points, build_tesla_arc_vertices, build_ui_vertices,
-        generate_coil_mesh, generate_toroid_mesh, length_vec3, multiply_matrices, normalize_vec3,
-        perpendicular_basis, polyline_length, rotation_x, shader_flow_parameters,
-        slider_value_from_cursor, static_demo_mvp, sub_vec3, tesla_arc_profile,
-        toroid_surface_point, translation, viewport_from_extent, CameraConfig, SliderValue,
-        ToroidSpec, Viewport, TESLA_ARC_LENGTH_MULTIPLIER, TESLA_ARC_SEGMENTS, TESLA_COIL_CENTER,
-        TESLA_COIL_HEIGHT, TESLA_COIL_RADIUS,
+        build_demo_layout, build_emf_field_vertices, build_tesla_arc_points,
+        build_tesla_arc_vertices, build_ui_vertices, dot_vec3, generate_coil_mesh,
+        generate_toroid_mesh, multiply_matrices, normalize_vec3, perpendicular_basis,
+        polyline_length, rotation_x, shader_flow_parameters, slider_value_from_cursor,
+        static_demo_mvp, sub_vec3, tesla_arc_profile, toroid_surface_normal, toroid_surface_point,
+        translation, viewport_from_extent, CameraConfig, SliderValue, ToroidSpec, Viewport,
+        EMF_FIELD_ELECTRIC_COLOR, EMF_FIELD_ELECTRIC_X_SAMPLES, EMF_FIELD_ELECTRIC_Y_SAMPLES,
+        EMF_FIELD_ELECTRIC_Z_SAMPLES, EMF_FIELD_MAGNETIC_COLOR, EMF_FIELD_MAGNETIC_ORBIT_COUNT,
+        EMF_FIELD_MAGNETIC_SEGMENTS, TESLA_ARC_SEGMENTS, TOROID_MAJOR_RADIUS,
     };
 
     #[test]
@@ -2049,7 +2206,7 @@ mod tests {
     }
 
     #[test]
-    fn tesla_arc_centerline_is_about_three_times_longer_than_anchor_distance() {
+    fn tesla_arc_reaches_toroid_radius_and_is_perpendicular_to_toroid() {
         let control = 0.55;
         let spread = 0.5;
         let time_seconds = 0.5;
@@ -2058,30 +2215,51 @@ mod tests {
             (spread - 0.5) * 0.82 + 0.05 * (time_seconds * 1.6 + arc_index as f32 * 0.9).sin();
         let minor_theta = 0.18 * PI + 0.08 * (time_seconds * 2.1 + arc_index as f32 * 0.7).cos();
         let start = toroid_surface_point(major_theta, minor_theta);
-        let end_angle = -0.55 + (spread - 0.5) * 1.15;
-        let end = [
-            TESLA_COIL_CENTER[0] + TESLA_COIL_RADIUS * end_angle.cos(),
-            TESLA_COIL_CENTER[1] + TESLA_COIL_HEIGHT * 0.5 - 0.08 + 0.12 * (spread - 0.5),
-            TESLA_COIL_CENTER[2] + TESLA_COIL_RADIUS * end_angle.sin(),
-        ];
-        let direction = normalize_vec3(sub_vec3(end, start));
+        let direction = toroid_surface_normal(major_theta, minor_theta);
         let (side, up) = perpendicular_basis(direction);
-        let base_distance = length_vec3(sub_vec3(end, start));
         let points = build_tesla_arc_points(
             start,
-            end,
+            direction,
             side,
             up,
-            direction,
-            base_distance,
+            TOROID_MAJOR_RADIUS,
             control,
             time_seconds,
             arc_index,
         );
         let path_length = polyline_length(&points);
+        let first_segment_direction = normalize_vec3(sub_vec3(points[1], points[0]));
 
-        assert!(path_length >= base_distance * (TESLA_ARC_LENGTH_MULTIPLIER * 0.95));
-        assert!(path_length <= base_distance * (TESLA_ARC_LENGTH_MULTIPLIER * 1.25));
+        assert!(dot_vec3(first_segment_direction, direction) > 0.85);
+        assert!(path_length >= TOROID_MAJOR_RADIUS * 0.85);
+        assert!(path_length <= TOROID_MAJOR_RADIUS * 1.25);
+    }
+
+    #[test]
+    fn emf_field_vertices_are_color_coded_and_finite() {
+        let low = build_emf_field_vertices(SliderValue::new_clamped(0.25), 0.25);
+        let high = build_emf_field_vertices(SliderValue::new_clamped(0.85), 0.75);
+        let electric_count = EMF_FIELD_ELECTRIC_X_SAMPLES.len()
+            * EMF_FIELD_ELECTRIC_Y_SAMPLES.len()
+            * EMF_FIELD_ELECTRIC_Z_SAMPLES.len();
+        let magnetic_count = EMF_FIELD_MAGNETIC_ORBIT_COUNT * EMF_FIELD_MAGNETIC_SEGMENTS * 6;
+        let expected_count = electric_count * 12 + magnetic_count;
+
+        assert_eq!(low.len(), expected_count);
+        assert_eq!(high.len(), expected_count);
+        assert!(low
+            .iter()
+            .all(|vertex| vertex.position.iter().all(|value| value.is_finite())));
+        assert!(high
+            .iter()
+            .all(|vertex| vertex.position.iter().all(|value| value.is_finite())));
+        assert!(low
+            .iter()
+            .any(|vertex| vertex.color == EMF_FIELD_ELECTRIC_COLOR));
+        assert!(low
+            .iter()
+            .any(|vertex| vertex.color == EMF_FIELD_MAGNETIC_COLOR));
+        assert_ne!(low[0].position, high[0].position);
     }
 
     #[test]
