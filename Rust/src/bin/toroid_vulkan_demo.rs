@@ -223,6 +223,14 @@ const SCIENTIFIC_LABEL_BACKGROUND: [f32; 3] = [0.08, 0.10, 0.14];
 const SCIENTIFIC_MARKER_V0_COLOR: [f32; 3] = [0.18, 0.78, 0.86];
 const SCIENTIFIC_MARKER_V1_COLOR: [f32; 3] = [0.78, 0.82, 0.88];
 const SCIENTIFIC_MARKER_Q_COLOR: [f32; 3] = EMF_FIELD_ELECTRIC_COLOR;
+const ORBITAL_BUTTON_HEIGHT_PX: f32 = 34.0;
+const ORBITAL_BUTTON_GAP_PX: f32 = 10.0;
+const ORBITAL_BUTTON_ACTIVE_COLOR: [f32; 3] = [0.20, 0.34, 0.58];
+const ORBITAL_BUTTON_IDLE_COLOR: [f32; 3] = [0.12, 0.16, 0.23];
+const ORBITAL_BUTTON_BORDER_COLOR: [f32; 3] = [0.32, 0.40, 0.55];
+const S_ORBITAL_COLOR: [f32; 3] = [0.70, 0.76, 0.92];
+const D_ORBITAL_POSITIVE_COLOR: [f32; 3] = [0.86, 0.58, 0.22];
+const D_ORBITAL_NEGATIVE_COLOR: [f32; 3] = [0.29, 0.45, 0.87];
 
 #[derive(Debug)]
 struct ToroidMesh {
@@ -267,6 +275,19 @@ struct ScientificOverlay {
     electric_magnitude: f32,
     charge_strength: f32,
     arc_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SelectedOrbital {
+    None,
+    S,
+    D,
+}
+
+impl Default for SelectedOrbital {
+    fn default() -> Self {
+        Self::None
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -375,6 +396,8 @@ struct DemoLayout {
     slider_track_rect: Rect,
     slider_hit_rect: Rect,
     slider_knob_rect: Rect,
+    s_orbital_button_rect: Rect,
+    d_orbital_button_rect: Rect,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -494,6 +517,56 @@ fn run() -> DemoResult<()> {
         },
         coil_mesh.indices.iter().copied(),
     )?;
+    let s_orbital_mesh = generate_s_orbital_mesh();
+    let s_orbital_vertex_buffer = Buffer::from_iter(
+        memory_allocator.as_ref(),
+        BufferCreateInfo {
+            usage: BufferUsage::VERTEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
+        s_orbital_mesh.vertices.iter().copied(),
+    )?;
+    let s_orbital_index_buffer = Buffer::from_iter(
+        memory_allocator.as_ref(),
+        BufferCreateInfo {
+            usage: BufferUsage::INDEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
+        s_orbital_mesh.indices.iter().copied(),
+    )?;
+    let d_orbital_mesh = generate_d_orbital_mesh();
+    let d_orbital_vertex_buffer = Buffer::from_iter(
+        memory_allocator.as_ref(),
+        BufferCreateInfo {
+            usage: BufferUsage::VERTEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
+        d_orbital_mesh.vertices.iter().copied(),
+    )?;
+    let d_orbital_index_buffer = Buffer::from_iter(
+        memory_allocator.as_ref(),
+        BufferCreateInfo {
+            usage: BufferUsage::INDEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
+        d_orbital_mesh.indices.iter().copied(),
+    )?;
 
     let vs = load_wgsl_shader(
         device.clone(),
@@ -555,6 +628,7 @@ fn run() -> DemoResult<()> {
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
     let mut shader_control_value = SliderValue::MIDPOINT;
     let mut slider_drag_active = false;
+    let mut selected_orbital = SelectedOrbital::None;
     let mut cursor_position = [0.0_f32, 0.0_f32];
     let mut next_frame_time = Instant::now();
 
@@ -627,6 +701,20 @@ fn run() -> DemoResult<()> {
                                     &layout.slider_track_rect,
                                     cursor_position[1],
                                 );
+                                next_frame_time = Instant::now();
+                                request_window_redraw(&surface);
+                            } else if layout
+                                .s_orbital_button_rect
+                                .contains(cursor_position[0], cursor_position[1])
+                            {
+                                selected_orbital = SelectedOrbital::S;
+                                next_frame_time = Instant::now();
+                                request_window_redraw(&surface);
+                            } else if layout
+                                .d_orbital_button_rect
+                                .contains(cursor_position[0], cursor_position[1])
+                            {
+                                selected_orbital = SelectedOrbital::D;
                                 next_frame_time = Instant::now();
                                 request_window_redraw(&surface);
                             }
@@ -736,8 +824,13 @@ fn run() -> DemoResult<()> {
                     }
                 };
 
-                let ui_vertices =
-                    build_ui_vertices(&layout, shader_control_value, &mvp, animation_seconds);
+                let ui_vertices = build_ui_vertices(
+                    &layout,
+                    shader_control_value,
+                    &mvp,
+                    animation_seconds,
+                    selected_orbital,
+                );
                 let ui_vertex_buffer = match Buffer::from_iter(
                     memory_allocator.as_ref(),
                     BufferCreateInfo {
@@ -870,6 +963,34 @@ fn run() -> DemoResult<()> {
                     eprintln!("Failed to draw Tesla coil mesh: {error}");
                     *control_flow = ControlFlow::Exit;
                     return;
+                }
+
+                match selected_orbital {
+                    SelectedOrbital::S => {
+                        builder.bind_vertex_buffers(0, s_orbital_vertex_buffer.clone());
+                        builder.bind_index_buffer(s_orbital_index_buffer.clone());
+
+                        if let Err(error) =
+                            builder.draw_indexed(s_orbital_index_buffer.len() as u32, 1, 0, 0, 0)
+                        {
+                            eprintln!("Failed to draw s orbital mesh: {error}");
+                            *control_flow = ControlFlow::Exit;
+                            return;
+                        }
+                    }
+                    SelectedOrbital::D => {
+                        builder.bind_vertex_buffers(0, d_orbital_vertex_buffer.clone());
+                        builder.bind_index_buffer(d_orbital_index_buffer.clone());
+
+                        if let Err(error) =
+                            builder.draw_indexed(d_orbital_index_buffer.len() as u32, 1, 0, 0, 0)
+                        {
+                            eprintln!("Failed to draw d orbital mesh: {error}");
+                            *control_flow = ControlFlow::Exit;
+                            return;
+                        }
+                    }
+                    SelectedOrbital::None => {}
                 }
 
                 builder.bind_pipeline_graphics(emf_pipeline.clone());
@@ -1355,12 +1476,7 @@ fn build_demo_layout(full_viewport: &Viewport, slider_value: SliderValue) -> Dem
             bottom: slider_bottom,
         }
     } else {
-        Rect {
-            left: 0.0,
-            top: 0.0,
-            right: 0.0,
-            bottom: 0.0,
-        }
+        zero_rect()
     };
 
     let slider_center_y = slider_center_y(&slider_track_rect, slider_value);
@@ -1372,18 +1488,38 @@ fn build_demo_layout(full_viewport: &Viewport, slider_value: SliderValue) -> Dem
             bottom: slider_center_y + SLIDER_KNOB_HALF_HEIGHT_PX,
         }
     } else {
-        Rect {
-            left: 0.0,
-            top: 0.0,
-            right: 0.0,
-            bottom: 0.0,
-        }
+        zero_rect()
     };
     let slider_hit_rect = Rect {
         left: slider_knob_rect.left.min(slider_track_rect.left) - 12.0,
         top: slider_track_rect.top - 12.0,
         right: slider_knob_rect.right.max(slider_track_rect.right) + 12.0,
         bottom: slider_track_rect.bottom + 12.0,
+    };
+    let (s_orbital_button_rect, d_orbital_button_rect) = if panel_width > 0.0 {
+        let button_left = panel_rect.left + 14.0;
+        let button_right = panel_rect.right - 14.0;
+        let d_bottom = (panel_rect.bottom - 18.0).min(full_height - 12.0);
+        let d_top = (d_bottom - ORBITAL_BUTTON_HEIGHT_PX).max(panel_rect.top + 12.0);
+        let s_bottom = d_top - ORBITAL_BUTTON_GAP_PX;
+        let s_top = (s_bottom - ORBITAL_BUTTON_HEIGHT_PX).max(panel_rect.top + 12.0);
+
+        (
+            Rect {
+                left: button_left,
+                top: s_top,
+                right: button_right,
+                bottom: s_bottom,
+            },
+            Rect {
+                left: button_left,
+                top: d_top,
+                right: button_right,
+                bottom: d_bottom,
+            },
+        )
+    } else {
+        (zero_rect(), zero_rect())
     };
 
     DemoLayout {
@@ -1394,6 +1530,17 @@ fn build_demo_layout(full_viewport: &Viewport, slider_value: SliderValue) -> Dem
         slider_track_rect,
         slider_hit_rect,
         slider_knob_rect,
+        s_orbital_button_rect,
+        d_orbital_button_rect,
+    }
+}
+
+fn zero_rect() -> Rect {
+    Rect {
+        left: 0.0,
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
     }
 }
 
@@ -1415,6 +1562,7 @@ fn build_ui_vertices(
     slider_value: SliderValue,
     scene_mvp: &Matrix4,
     time_seconds: f32,
+    selected_orbital: SelectedOrbital,
 ) -> Vec<UiVertex> {
     let mut vertices = Vec::new();
 
@@ -1458,9 +1606,104 @@ fn build_ui_vertices(
 
     let overlay = build_scientific_overlay(slider_value, time_seconds);
     push_scientific_panel(&mut vertices, layout, &overlay);
+    push_orbital_button(
+        &mut vertices,
+        &layout.s_orbital_button_rect,
+        &layout.ui_viewport,
+        "S ORBITAL",
+        selected_orbital == SelectedOrbital::S,
+    );
+    push_orbital_button(
+        &mut vertices,
+        &layout.d_orbital_button_rect,
+        &layout.ui_viewport,
+        "D ORBITAL",
+        selected_orbital == SelectedOrbital::D,
+    );
     push_projected_vertex_labels(&mut vertices, layout, scene_mvp, &overlay);
 
     vertices
+}
+
+fn push_orbital_button(
+    vertices: &mut Vec<UiVertex>,
+    rect: &Rect,
+    viewport: &Viewport,
+    label: &str,
+    is_selected: bool,
+) {
+    if rect.width() <= 0.0 || rect.height() <= 0.0 {
+        return;
+    }
+
+    push_rect(
+        vertices,
+        rect,
+        viewport,
+        if is_selected {
+            ORBITAL_BUTTON_ACTIVE_COLOR
+        } else {
+            ORBITAL_BUTTON_IDLE_COLOR
+        },
+    );
+    let border = 2.0;
+    push_rect(
+        vertices,
+        &Rect {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.top + border,
+        },
+        viewport,
+        ORBITAL_BUTTON_BORDER_COLOR,
+    );
+    push_rect(
+        vertices,
+        &Rect {
+            left: rect.left,
+            top: rect.bottom - border,
+            right: rect.right,
+            bottom: rect.bottom,
+        },
+        viewport,
+        ORBITAL_BUTTON_BORDER_COLOR,
+    );
+    push_rect(
+        vertices,
+        &Rect {
+            left: rect.left,
+            top: rect.top,
+            right: rect.left + border,
+            bottom: rect.bottom,
+        },
+        viewport,
+        ORBITAL_BUTTON_BORDER_COLOR,
+    );
+    push_rect(
+        vertices,
+        &Rect {
+            left: rect.right - border,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+        },
+        viewport,
+        ORBITAL_BUTTON_BORDER_COLOR,
+    );
+
+    let (text_width, text_height) = text_pixel_size(label, 1.4);
+    let text_x = rect.left + (rect.width() - text_width) * 0.5;
+    let text_y = rect.top + (rect.height() - text_height) * 0.5;
+    push_text(
+        vertices,
+        label,
+        text_x,
+        text_y,
+        1.4,
+        viewport,
+        SCIENTIFIC_TEXT_COLOR,
+    );
 }
 
 fn build_scientific_overlay(slider_value: SliderValue, time_seconds: f32) -> ScientificOverlay {
@@ -1679,6 +1922,9 @@ fn glyph_bitmap(character: char) -> Option<[u8; 7]> {
         'A' => Some([
             0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
         ]),
+        'B' => Some([
+            0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110,
+        ]),
         'C' => Some([
             0b01111, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b01111,
         ]),
@@ -1699,6 +1945,9 @@ fn glyph_bitmap(character: char) -> Option<[u8; 7]> {
         ]),
         'N' => Some([
             0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001,
+        ]),
+        'O' => Some([
+            0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
         ]),
         'Q' => Some([
             0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101,
@@ -1960,6 +2209,113 @@ fn generate_coil_mesh() -> ToroidMesh {
     }
 
     ToroidMesh { vertices, indices }
+}
+
+fn generate_s_orbital_mesh() -> ToroidMesh {
+    let mut mesh = ToroidMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+    };
+
+    append_ellipsoid_patch(
+        &mut mesh,
+        [0.0, 0.0, 0.0],
+        [0.38, 0.38, 0.38],
+        S_ORBITAL_COLOR,
+        20,
+        12,
+    );
+
+    mesh
+}
+
+fn generate_d_orbital_mesh() -> ToroidMesh {
+    let mut mesh = ToroidMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+    };
+    let lobes = [
+        (
+            [0.48, 0.0, 0.0],
+            [0.28, 0.18, 0.18],
+            D_ORBITAL_POSITIVE_COLOR,
+        ),
+        (
+            [-0.48, 0.0, 0.0],
+            [0.28, 0.18, 0.18],
+            D_ORBITAL_POSITIVE_COLOR,
+        ),
+        (
+            [0.0, 0.0, 0.48],
+            [0.18, 0.18, 0.28],
+            D_ORBITAL_NEGATIVE_COLOR,
+        ),
+        (
+            [0.0, 0.0, -0.48],
+            [0.18, 0.18, 0.28],
+            D_ORBITAL_NEGATIVE_COLOR,
+        ),
+    ];
+
+    for (center, radii, color) in lobes {
+        append_ellipsoid_patch(&mut mesh, center, radii, color, 16, 10);
+    }
+
+    mesh
+}
+
+fn append_ellipsoid_patch(
+    mesh: &mut ToroidMesh,
+    center: [f32; 3],
+    radii: [f32; 3],
+    color: [f32; 3],
+    longitude_segments: u32,
+    latitude_segments: u32,
+) {
+    let base_index = mesh.vertices.len() as u32;
+
+    for latitude_index in 0..=latitude_segments {
+        let v = latitude_index as f32 / latitude_segments.max(1) as f32;
+        let theta = v * PI;
+        let (theta_sin, theta_cos) = theta.sin_cos();
+
+        for longitude_index in 0..=longitude_segments {
+            let u = longitude_index as f32 / longitude_segments.max(1) as f32;
+            let phi = u * 2.0 * PI;
+            let (phi_sin, phi_cos) = phi.sin_cos();
+            let unit = [theta_sin * phi_cos, theta_cos, theta_sin * phi_sin];
+            let scaled = [unit[0] * radii[0], unit[1] * radii[1], unit[2] * radii[2]];
+            let position = add_vec3(center, scaled);
+            let normal = normalize_vec3([
+                unit[0] / radii[0].max(1e-4),
+                unit[1] / radii[1].max(1e-4),
+                unit[2] / radii[2].max(1e-4),
+            ]);
+
+            mesh.vertices.push(SceneVertex {
+                position,
+                normal,
+                color,
+            });
+        }
+    }
+
+    let row_stride = longitude_segments + 1;
+    for latitude_index in 0..latitude_segments {
+        for longitude_index in 0..longitude_segments {
+            let current = base_index + latitude_index * row_stride + longitude_index;
+            let next = current + row_stride;
+
+            mesh.indices.extend_from_slice(&[
+                current,
+                next,
+                current + 1,
+                current + 1,
+                next,
+                next + 1,
+            ]);
+        }
+    }
 }
 
 fn tesla_arc_profile(slider_value: SliderValue) -> TeslaArcProfile {
@@ -2473,13 +2829,14 @@ mod tests {
     use super::{
         build_demo_layout, build_emf_field_vertices, build_tesla_arc_points,
         build_tesla_arc_vertices, build_ui_vertices, dot_vec3, generate_coil_mesh,
-        generate_toroid_mesh, multiply_matrices, normalize_vec3, polyline_length, rotation_x,
-        shader_flow_parameters, slider_value_from_cursor, static_demo_mvp, sub_vec3,
-        tesla_arc_frame, tesla_arc_profile, translation, viewport_from_extent, CameraConfig,
-        SliderValue, ToroidSpec, Viewport, EMF_FIELD_ELECTRIC_COLOR, EMF_FIELD_ELECTRIC_X_SAMPLES,
-        EMF_FIELD_ELECTRIC_Y_SAMPLES, EMF_FIELD_ELECTRIC_Z_SAMPLES, EMF_FIELD_MAGNETIC_COLOR,
-        EMF_FIELD_MAGNETIC_ORBIT_COUNT, EMF_FIELD_MAGNETIC_SEGMENTS, TESLA_ARC_HIGH_COLOR,
-        TESLA_ARC_SEGMENTS, TOROID_MAJOR_RADIUS,
+        generate_d_orbital_mesh, generate_s_orbital_mesh, generate_toroid_mesh, multiply_matrices,
+        normalize_vec3, polyline_length, rotation_x, shader_flow_parameters,
+        slider_value_from_cursor, static_demo_mvp, sub_vec3, tesla_arc_frame, tesla_arc_profile,
+        translation, viewport_from_extent, CameraConfig, SelectedOrbital, SliderValue, ToroidSpec,
+        Viewport, D_ORBITAL_NEGATIVE_COLOR, D_ORBITAL_POSITIVE_COLOR, EMF_FIELD_ELECTRIC_COLOR,
+        EMF_FIELD_ELECTRIC_X_SAMPLES, EMF_FIELD_ELECTRIC_Y_SAMPLES, EMF_FIELD_ELECTRIC_Z_SAMPLES,
+        EMF_FIELD_MAGNETIC_COLOR, EMF_FIELD_MAGNETIC_ORBIT_COUNT, EMF_FIELD_MAGNETIC_SEGMENTS,
+        S_ORBITAL_COLOR, TESLA_ARC_HIGH_COLOR, TESLA_ARC_SEGMENTS, TOROID_MAJOR_RADIUS,
     };
 
     #[test]
@@ -2525,6 +2882,8 @@ mod tests {
         assert!(layout.scene_viewport.dimensions[0] < full_viewport.dimensions[0]);
         assert!(layout.panel_rect.left >= layout.scene_viewport.dimensions[0]);
         assert!(layout.slider_track_rect.left >= layout.panel_rect.left);
+        assert!(layout.s_orbital_button_rect.top >= layout.panel_rect.top);
+        assert!(layout.d_orbital_button_rect.bottom <= layout.panel_rect.bottom);
     }
 
     #[test]
@@ -2548,13 +2907,44 @@ mod tests {
         let slider_value = SliderValue::new_clamped(0.65);
         let layout = build_demo_layout(&full_viewport, slider_value);
         let mvp = static_demo_mvp(&CameraConfig::default(), &layout.scene_viewport);
-        let vertices = build_ui_vertices(&layout, slider_value, &mvp, 0.25);
+        let vertices = build_ui_vertices(&layout, slider_value, &mvp, 0.25, SelectedOrbital::S);
 
         assert!(vertices.len() > 30);
         assert!(vertices.iter().all(|vertex| {
             vertex.position.iter().all(|value| value.is_finite())
                 && vertex.color.iter().all(|value| value.is_finite())
         }));
+    }
+
+    #[test]
+    fn orbital_meshes_are_finite_and_indexed() {
+        let s_mesh = generate_s_orbital_mesh();
+        let d_mesh = generate_d_orbital_mesh();
+
+        for mesh in [&s_mesh, &d_mesh] {
+            assert!(!mesh.vertices.is_empty());
+            assert!(!mesh.indices.is_empty());
+            assert!(mesh
+                .vertices
+                .iter()
+                .all(|vertex| vertex.position.iter().all(|value| value.is_finite())));
+            assert!(mesh
+                .indices
+                .iter()
+                .all(|&index| (index as usize) < mesh.vertices.len()));
+        }
+        assert!(s_mesh
+            .vertices
+            .iter()
+            .any(|vertex| vertex.color == S_ORBITAL_COLOR));
+        assert!(d_mesh
+            .vertices
+            .iter()
+            .any(|vertex| vertex.color == D_ORBITAL_POSITIVE_COLOR));
+        assert!(d_mesh
+            .vertices
+            .iter()
+            .any(|vertex| vertex.color == D_ORBITAL_NEGATIVE_COLOR));
     }
 
     #[test]
