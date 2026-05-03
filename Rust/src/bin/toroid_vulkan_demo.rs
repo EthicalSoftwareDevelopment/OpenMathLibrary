@@ -211,10 +211,18 @@ const EMF_FIELD_COLOR: [f32; 3] = [0.62, 0.64, 0.68];
 const EMF_FIELD_ELECTRIC_X_SAMPLES: [f32; 3] = [-0.85, 0.0, 0.85];
 const EMF_FIELD_ELECTRIC_Y_SAMPLES: [f32; 3] = [-0.65, 0.0, 0.65];
 const EMF_FIELD_ELECTRIC_Z_SAMPLES: [f32; 3] = [-0.65, 0.0, 0.65];
-const EMF_FIELD_MAGNETIC_ORBIT_COUNT: usize = EMF_FIELD_TOROID_ORBIT_COUNT + EMF_FIELD_COIL_ORBIT_COUNT;
+const EMF_FIELD_MAGNETIC_ORBIT_COUNT: usize =
+    EMF_FIELD_TOROID_ORBIT_COUNT + EMF_FIELD_COIL_ORBIT_COUNT;
 const EMF_FIELD_MAGNETIC_SEGMENTS: usize = EMF_FIELD_SEGMENTS;
 const EMF_FIELD_ELECTRIC_COLOR: [f32; 3] = [0.18, 0.70, 0.98];
 const EMF_FIELD_MAGNETIC_COLOR: [f32; 3] = [0.98, 0.42, 0.22];
+const TESLA_ARC_HIGH_COLOR: [f32; 3] = [0.24, 0.26, 0.30];
+const SCIENTIFIC_TEXT_COLOR: [f32; 3] = [0.82, 0.88, 0.96];
+const SCIENTIFIC_MUTED_COLOR: [f32; 3] = [0.55, 0.64, 0.78];
+const SCIENTIFIC_LABEL_BACKGROUND: [f32; 3] = [0.08, 0.10, 0.14];
+const SCIENTIFIC_MARKER_V0_COLOR: [f32; 3] = [0.18, 0.78, 0.86];
+const SCIENTIFIC_MARKER_V1_COLOR: [f32; 3] = [0.78, 0.82, 0.88];
+const SCIENTIFIC_MARKER_Q_COLOR: [f32; 3] = EMF_FIELD_ELECTRIC_COLOR;
 
 #[derive(Debug)]
 struct ToroidMesh {
@@ -248,6 +256,17 @@ impl SliderValue {
 struct TeslaArcProfile {
     arc_count: usize,
     color: [f32; 3],
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ScientificOverlay {
+    arc_start: [f32; 3],
+    arc_tip: [f32; 3],
+    charge_position: [f32; 3],
+    arc_length: f32,
+    electric_magnitude: f32,
+    charge_strength: f32,
+    arc_count: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -717,7 +736,8 @@ fn run() -> DemoResult<()> {
                     }
                 };
 
-                let ui_vertices = build_ui_vertices(&layout, shader_control_value);
+                let ui_vertices =
+                    build_ui_vertices(&layout, shader_control_value, &mvp, animation_seconds);
                 let ui_vertex_buffer = match Buffer::from_iter(
                     memory_allocator.as_ref(),
                     BufferCreateInfo {
@@ -1390,8 +1410,13 @@ fn slider_value_from_cursor(track_rect: &Rect, cursor_y: f32) -> SliderValue {
     SliderValue::new_clamped(1.0 - normalized)
 }
 
-fn build_ui_vertices(layout: &DemoLayout, slider_value: SliderValue) -> Vec<UiVertex> {
-    let mut vertices = Vec::with_capacity(30);
+fn build_ui_vertices(
+    layout: &DemoLayout,
+    slider_value: SliderValue,
+    scene_mvp: &Matrix4,
+    time_seconds: f32,
+) -> Vec<UiVertex> {
+    let mut vertices = Vec::new();
 
     push_rect(
         &mut vertices,
@@ -1431,7 +1456,362 @@ fn build_ui_vertices(layout: &DemoLayout, slider_value: SliderValue) -> Vec<UiVe
         [0.88, 0.92, 0.98],
     );
 
+    let overlay = build_scientific_overlay(slider_value, time_seconds);
+    push_scientific_panel(&mut vertices, layout, &overlay);
+    push_projected_vertex_labels(&mut vertices, layout, scene_mvp, &overlay);
+
     vertices
+}
+
+fn build_scientific_overlay(slider_value: SliderValue, time_seconds: f32) -> ScientificOverlay {
+    let profile = tesla_arc_profile(slider_value);
+    let control = slider_value.get().clamp(0.0, 1.0);
+    let label_arc_index = profile.arc_count / 2;
+    let (start, direction, side, up) =
+        tesla_arc_frame(profile.arc_count, time_seconds, label_arc_index);
+    let points = build_tesla_arc_points(
+        start,
+        direction,
+        side,
+        up,
+        TOROID_MAJOR_RADIUS,
+        control,
+        time_seconds,
+        label_arc_index,
+    );
+    let arc_tip = points.last().copied().unwrap_or(start);
+    let arc_length = polyline_length(&points);
+    let (charge_position, charge_strength) = field_charge_state(slider_value, time_seconds);
+    let electric_magnitude = length_vec3(electric_field_vector(
+        start,
+        charge_position,
+        charge_strength,
+    ));
+
+    ScientificOverlay {
+        arc_start: start,
+        arc_tip,
+        charge_position,
+        arc_length,
+        electric_magnitude,
+        charge_strength,
+        arc_count: profile.arc_count,
+    }
+}
+
+fn push_scientific_panel(
+    vertices: &mut Vec<UiVertex>,
+    layout: &DemoLayout,
+    overlay: &ScientificOverlay,
+) {
+    if layout.panel_rect.width() <= 0.0 {
+        return;
+    }
+
+    let base_x = layout.panel_rect.left + 12.0;
+    let base_y = layout.panel_rect.top + 18.0;
+    let line_step = 14.0;
+    let heading = "SCIENTIFIC DATA";
+    let lines = [
+        format!(
+            "V0=({:+.2},{:+.2},{:+.2})",
+            overlay.arc_start[0], overlay.arc_start[1], overlay.arc_start[2]
+        ),
+        format!(
+            "V1=({:+.2},{:+.2},{:+.2})",
+            overlay.arc_tip[0], overlay.arc_tip[1], overlay.arc_tip[2]
+        ),
+        format!(
+            "Q =({:+.2},{:+.2},{:+.2})",
+            overlay.charge_position[0], overlay.charge_position[1], overlay.charge_position[2]
+        ),
+        format!("LEN={:.2}", overlay.arc_length),
+        format!("E0={:.3}", overlay.electric_magnitude),
+        format!("Q0={:+.2}", overlay.charge_strength),
+        format!("ARC={}", overlay.arc_count),
+    ];
+
+    push_text(
+        vertices,
+        heading,
+        base_x,
+        base_y,
+        1.2,
+        &layout.ui_viewport,
+        SCIENTIFIC_TEXT_COLOR,
+    );
+
+    for (index, line) in lines.iter().enumerate() {
+        push_text(
+            vertices,
+            line,
+            base_x,
+            base_y + 22.0 + index as f32 * line_step,
+            1.0,
+            &layout.ui_viewport,
+            SCIENTIFIC_MUTED_COLOR,
+        );
+    }
+}
+
+fn push_projected_vertex_labels(
+    vertices: &mut Vec<UiVertex>,
+    layout: &DemoLayout,
+    scene_mvp: &Matrix4,
+    overlay: &ScientificOverlay,
+) {
+    let labels = [
+        ("V0", overlay.arc_start, SCIENTIFIC_MARKER_V0_COLOR),
+        ("V1", overlay.arc_tip, SCIENTIFIC_MARKER_V1_COLOR),
+        ("Q", overlay.charge_position, SCIENTIFIC_MARKER_Q_COLOR),
+    ];
+
+    for (text, world_position, color) in labels {
+        if let Some(pixel_position) =
+            project_world_to_pixels(world_position, scene_mvp, &layout.scene_viewport)
+        {
+            push_projected_label(vertices, text, pixel_position, &layout.ui_viewport, color);
+        }
+    }
+}
+
+fn push_projected_label(
+    vertices: &mut Vec<UiVertex>,
+    text: &str,
+    pixel_position: [f32; 2],
+    viewport: &Viewport,
+    marker_color: [f32; 3],
+) {
+    let marker_rect = Rect {
+        left: pixel_position[0] - 3.0,
+        top: pixel_position[1] - 3.0,
+        right: pixel_position[0] + 3.0,
+        bottom: pixel_position[1] + 3.0,
+    };
+    let text_origin = [pixel_position[0] + 8.0, pixel_position[1] - 6.0];
+    let (text_width, text_height) = text_pixel_size(text, 2.0);
+    let background_rect = Rect {
+        left: text_origin[0] - 4.0,
+        top: text_origin[1] - 3.0,
+        right: text_origin[0] + text_width + 4.0,
+        bottom: text_origin[1] + text_height + 3.0,
+    };
+
+    push_rect(vertices, &marker_rect, viewport, marker_color);
+    push_rect(
+        vertices,
+        &background_rect,
+        viewport,
+        SCIENTIFIC_LABEL_BACKGROUND,
+    );
+    push_text(
+        vertices,
+        text,
+        text_origin[0],
+        text_origin[1],
+        2.0,
+        viewport,
+        SCIENTIFIC_TEXT_COLOR,
+    );
+}
+
+fn push_text(
+    vertices: &mut Vec<UiVertex>,
+    text: &str,
+    x: f32,
+    y: f32,
+    scale: f32,
+    viewport: &Viewport,
+    color: [f32; 3],
+) {
+    let mut cursor_x = x;
+    let mut cursor_y = y;
+    let advance = 6.0 * scale;
+    let line_height = 8.0 * scale;
+
+    for character in text.chars() {
+        match character {
+            '\n' => {
+                cursor_x = x;
+                cursor_y += line_height;
+                continue;
+            }
+            ' ' => {
+                cursor_x += advance;
+                continue;
+            }
+            _ => {}
+        }
+
+        if let Some(rows) = glyph_bitmap(character) {
+            for (row_index, row_bits) in rows.iter().enumerate() {
+                for column in 0..5 {
+                    if ((row_bits >> (4 - column)) & 1) == 0 {
+                        continue;
+                    }
+
+                    let left = cursor_x + column as f32 * scale;
+                    let top = cursor_y + row_index as f32 * scale;
+                    let rect = Rect {
+                        left,
+                        top,
+                        right: left + scale,
+                        bottom: top + scale,
+                    };
+                    push_rect(vertices, &rect, viewport, color);
+                }
+            }
+        }
+
+        cursor_x += advance;
+    }
+}
+
+fn text_pixel_size(text: &str, scale: f32) -> (f32, f32) {
+    let width = text.chars().count() as f32 * 6.0 * scale;
+    let height = 7.0 * scale;
+
+    (width, height)
+}
+
+fn glyph_bitmap(character: char) -> Option<[u8; 7]> {
+    match character.to_ascii_uppercase() {
+        'A' => Some([
+            0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
+        ]),
+        'C' => Some([
+            0b01111, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b01111,
+        ]),
+        'D' => Some([
+            0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110,
+        ]),
+        'E' => Some([
+            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111,
+        ]),
+        'F' => Some([
+            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000,
+        ]),
+        'I' => Some([
+            0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111,
+        ]),
+        'L' => Some([
+            0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111,
+        ]),
+        'N' => Some([
+            0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001,
+        ]),
+        'Q' => Some([
+            0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101,
+        ]),
+        'R' => Some([
+            0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001,
+        ]),
+        'S' => Some([
+            0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110,
+        ]),
+        'T' => Some([
+            0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100,
+        ]),
+        'V' => Some([
+            0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100,
+        ]),
+        '0' => Some([
+            0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110,
+        ]),
+        '1' => Some([
+            0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110,
+        ]),
+        '2' => Some([
+            0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111,
+        ]),
+        '3' => Some([
+            0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110,
+        ]),
+        '4' => Some([
+            0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010,
+        ]),
+        '5' => Some([
+            0b11111, 0b10000, 0b10000, 0b11110, 0b00001, 0b00001, 0b11110,
+        ]),
+        '6' => Some([
+            0b01110, 0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110,
+        ]),
+        '7' => Some([
+            0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000,
+        ]),
+        '8' => Some([
+            0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110,
+        ]),
+        '9' => Some([
+            0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110,
+        ]),
+        '+' => Some([
+            0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000,
+        ]),
+        '-' => Some([
+            0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000,
+        ]),
+        '=' => Some([
+            0b00000, 0b11111, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000,
+        ]),
+        '.' => Some([
+            0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00110, 0b00110,
+        ]),
+        ',' => Some([
+            0b00000, 0b00000, 0b00000, 0b00000, 0b00110, 0b00110, 0b00100,
+        ]),
+        '(' => Some([
+            0b00010, 0b00100, 0b01000, 0b01000, 0b01000, 0b00100, 0b00010,
+        ]),
+        ')' => Some([
+            0b01000, 0b00100, 0b00010, 0b00010, 0b00010, 0b00100, 0b01000,
+        ]),
+        _ => None,
+    }
+}
+
+fn project_world_to_pixels(
+    position: [f32; 3],
+    mvp: &Matrix4,
+    scene_viewport: &Viewport,
+) -> Option<[f32; 2]> {
+    let clip = transform_point(*mvp, position);
+    let w = clip[3];
+
+    if !clip.iter().all(|value| value.is_finite()) || w <= 1e-5 {
+        return None;
+    }
+
+    let inv_w = 1.0 / w;
+    let ndc_x = clip[0] * inv_w;
+    let ndc_y = clip[1] * inv_w;
+    let ndc_z = clip[2] * inv_w;
+
+    if !(-1.2..=1.2).contains(&ndc_x)
+        || !(-1.2..=1.2).contains(&ndc_y)
+        || !(-1.2..=1.2).contains(&ndc_z)
+    {
+        return None;
+    }
+
+    Some([
+        scene_viewport.origin[0] + (ndc_x * 0.5 + 0.5) * scene_viewport.dimensions[0],
+        scene_viewport.origin[1] + (1.0 - (ndc_y * 0.5 + 0.5)) * scene_viewport.dimensions[1],
+    ])
+}
+
+fn transform_point(matrix: Matrix4, position: [f32; 3]) -> [f32; 4] {
+    let x = position[0];
+    let y = position[1];
+    let z = position[2];
+    let w = 1.0;
+
+    [
+        matrix[0][0] * x + matrix[1][0] * y + matrix[2][0] * z + matrix[3][0] * w,
+        matrix[0][1] * x + matrix[1][1] * y + matrix[2][1] * z + matrix[3][1] * w,
+        matrix[0][2] * x + matrix[1][2] * y + matrix[2][2] * z + matrix[3][2] * w,
+        matrix[0][3] * x + matrix[1][3] * y + matrix[2][3] * z + matrix[3][3] * w,
+    ]
 }
 
 fn push_rect(vertices: &mut Vec<UiVertex>, rect: &Rect, viewport: &Viewport, color: [f32; 3]) {
@@ -1588,7 +1968,7 @@ fn tesla_arc_profile(slider_value: SliderValue) -> TeslaArcProfile {
     if control >= 0.70 {
         TeslaArcProfile {
             arc_count: 5,
-            color: [1.0, 0.44, 0.08],
+            color: TESLA_ARC_HIGH_COLOR,
         }
     } else if control >= 0.30 {
         TeslaArcProfile {
@@ -1609,17 +1989,8 @@ fn build_tesla_arc_vertices(slider_value: SliderValue, time_seconds: f32) -> Vec
     let mut vertices = Vec::with_capacity(profile.arc_count * TESLA_ARC_SEGMENTS * 6);
 
     for arc_index in 0..profile.arc_count {
-        let spread = if profile.arc_count == 1 {
-            0.5
-        } else {
-            arc_index as f32 / (profile.arc_count - 1) as f32
-        };
-        let major_theta =
-            (spread - 0.5) * 0.82 + 0.05 * (time_seconds * 1.6 + arc_index as f32 * 0.9).sin();
-        let minor_theta = 0.18 * PI + 0.08 * (time_seconds * 2.1 + arc_index as f32 * 0.7).cos();
-        let start = toroid_surface_point(major_theta, minor_theta);
-        let direction = toroid_surface_normal(major_theta, minor_theta);
-        let (side, up) = perpendicular_basis(direction);
+        let (start, direction, side, up) =
+            tesla_arc_frame(profile.arc_count, time_seconds, arc_index);
         let ribbon_width = 0.018 + 0.006 * control;
         let points = build_tesla_arc_points(
             start,
@@ -1636,6 +2007,26 @@ fn build_tesla_arc_vertices(slider_value: SliderValue, time_seconds: f32) -> Vec
     }
 
     vertices
+}
+
+fn tesla_arc_frame(
+    arc_count: usize,
+    time_seconds: f32,
+    arc_index: usize,
+) -> ([f32; 3], [f32; 3], [f32; 3], [f32; 3]) {
+    let spread = if arc_count <= 1 {
+        0.5
+    } else {
+        arc_index as f32 / (arc_count - 1) as f32
+    };
+    let major_theta =
+        (spread - 0.5) * 0.82 + 0.05 * (time_seconds * 1.6 + arc_index as f32 * 0.9).sin();
+    let minor_theta = 0.18 * PI + 0.08 * (time_seconds * 2.1 + arc_index as f32 * 0.7).cos();
+    let start = toroid_surface_point(major_theta, minor_theta);
+    let direction = toroid_surface_normal(major_theta, minor_theta);
+    let (side, up) = perpendicular_basis(direction);
+
+    (start, direction, side, up)
 }
 
 fn build_tesla_arc_points(
@@ -2079,18 +2470,16 @@ fn load_wgsl_shader(
 
 #[cfg(test)]
 mod tests {
-    use std::f32::consts::PI;
-
     use super::{
         build_demo_layout, build_emf_field_vertices, build_tesla_arc_points,
         build_tesla_arc_vertices, build_ui_vertices, dot_vec3, generate_coil_mesh,
-        generate_toroid_mesh, multiply_matrices, normalize_vec3, perpendicular_basis,
-        polyline_length, rotation_x, shader_flow_parameters, slider_value_from_cursor,
-        static_demo_mvp, sub_vec3, tesla_arc_profile, toroid_surface_normal, toroid_surface_point,
-        translation, viewport_from_extent, CameraConfig, SliderValue, ToroidSpec, Viewport,
-        EMF_FIELD_ELECTRIC_COLOR, EMF_FIELD_ELECTRIC_X_SAMPLES, EMF_FIELD_ELECTRIC_Y_SAMPLES,
-        EMF_FIELD_ELECTRIC_Z_SAMPLES, EMF_FIELD_MAGNETIC_COLOR, EMF_FIELD_MAGNETIC_ORBIT_COUNT,
-        EMF_FIELD_MAGNETIC_SEGMENTS, TESLA_ARC_SEGMENTS, TOROID_MAJOR_RADIUS,
+        generate_toroid_mesh, multiply_matrices, normalize_vec3, polyline_length, rotation_x,
+        shader_flow_parameters, slider_value_from_cursor, static_demo_mvp, sub_vec3,
+        tesla_arc_frame, tesla_arc_profile, translation, viewport_from_extent, CameraConfig,
+        SliderValue, ToroidSpec, Viewport, EMF_FIELD_ELECTRIC_COLOR, EMF_FIELD_ELECTRIC_X_SAMPLES,
+        EMF_FIELD_ELECTRIC_Y_SAMPLES, EMF_FIELD_ELECTRIC_Z_SAMPLES, EMF_FIELD_MAGNETIC_COLOR,
+        EMF_FIELD_MAGNETIC_ORBIT_COUNT, EMF_FIELD_MAGNETIC_SEGMENTS, TESLA_ARC_HIGH_COLOR,
+        TESLA_ARC_SEGMENTS, TOROID_MAJOR_RADIUS,
     };
 
     #[test]
@@ -2158,9 +2547,14 @@ mod tests {
         let full_viewport = viewport_from_extent([1280, 720]);
         let slider_value = SliderValue::new_clamped(0.65);
         let layout = build_demo_layout(&full_viewport, slider_value);
-        let vertices = build_ui_vertices(&layout, slider_value);
+        let mvp = static_demo_mvp(&CameraConfig::default(), &layout.scene_viewport);
+        let vertices = build_ui_vertices(&layout, slider_value, &mvp, 0.25);
 
-        assert_eq!(vertices.len(), 30);
+        assert!(vertices.len() > 30);
+        assert!(vertices.iter().all(|vertex| {
+            vertex.position.iter().all(|value| value.is_finite())
+                && vertex.color.iter().all(|value| value.is_finite())
+        }));
     }
 
     #[test]
@@ -2187,7 +2581,7 @@ mod tests {
         assert_eq!(medium.arc_count, 3);
         assert_eq!(medium.color, [0.04, 0.10, 0.46]);
         assert_eq!(high.arc_count, 5);
-        assert_eq!(high.color, [1.0, 0.44, 0.08]);
+        assert_eq!(high.color, TESLA_ARC_HIGH_COLOR);
     }
 
     #[test]
@@ -2208,15 +2602,9 @@ mod tests {
     #[test]
     fn tesla_arc_reaches_toroid_radius_and_is_perpendicular_to_toroid() {
         let control = 0.55;
-        let spread = 0.5;
         let time_seconds = 0.5;
         let arc_index = 0;
-        let major_theta =
-            (spread - 0.5) * 0.82 + 0.05 * (time_seconds * 1.6 + arc_index as f32 * 0.9).sin();
-        let minor_theta = 0.18 * PI + 0.08 * (time_seconds * 2.1 + arc_index as f32 * 0.7).cos();
-        let start = toroid_surface_point(major_theta, minor_theta);
-        let direction = toroid_surface_normal(major_theta, minor_theta);
-        let (side, up) = perpendicular_basis(direction);
+        let (start, direction, side, up) = tesla_arc_frame(1, time_seconds, arc_index);
         let points = build_tesla_arc_points(
             start,
             direction,
